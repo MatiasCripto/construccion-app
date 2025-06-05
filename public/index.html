@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Obras - Construcción App</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Maps API -->
+    <script async defer 
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKiy4aTR&libraries=places">
+    </script>
+    
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .card-shadow {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .map-container {
+            height: 400px;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <!-- Componentes React -->
+    <script type="text/babel" src="src/components/Login.js"></script>
+    <script type="text/babel" src="src/components/Dashboard.js"></script>
+    <script type="text/babel" src="src/components/ObraCard.js"></script>
+    <script type="text/babel" src="src/components/ChatComponent.js"></script>
+    <script type="text/babel" src="src/components/MaterialSelector.js"></script>
+    <script type="text/babel" src="src/components/PhotoUpload.js"></script>
+    <script type="text/babel" src="src/components/AdminPanel.js"></script>
+    <script type="text/babel" src="src/components/AlbanilWorkflow.js"></script>
+    <script type="text/babel" src="src/components/MapSelector.js"></script>
+    <script type="text/babel" src="src/components/MapViewer.js"></script>
+    <script type="text/babel" src="src/App.js"></script>
+    <script type="text/babel" src="src/index.js"></script>
+</body>
+</html>
