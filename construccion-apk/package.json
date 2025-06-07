@@ -1,0 +1,19 @@
+{
+  "name": "construccion-apk",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^7.3.0",
+    "@capacitor/cli": "^7.3.0",
+    "@capacitor/core": "^7.3.0",
+    "cloudinary": "^2.6.1",
+    "firebase": "^11.9.0"
+  },
+  "description": ""
+}
