@@ -1,5 +1,12 @@
 {
   "appId": "com.construccionpro.app",
   "appName": "Construccion Pro",
-  "webDir": "public"
+  "webDir": "public",
+  "server": {
+    "url": "https://construccion-app-i52g.onrender.com",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
 }
