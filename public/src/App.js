@@ -53,15 +53,20 @@ const App = () => {
     );
   }
 
+  // 🔧 INTEGRACIÓN CON PERMISOS - Solo envuelvo el contenido existente
   return (
-    <div className="min-h-screen">
-      {user ? (
-        <Dashboard user={user} onLogout={handleLogout} />
-      ) : (
-        <Login onLogin={handleLogin} />
-      )}
-    </div>
+    <PermissionsManager requiredPermissions={['camera', 'microphone', 'location']}>
+      <div className="min-h-screen">
+        {user ? (
+          <Dashboard user={user} onLogout={handleLogout} />
+        ) : (
+          <Login onLogin={handleLogin} />
+        )}
+      </div>
+    </PermissionsManager>
   );
 };
+
+window.App = App;
 
 window.App = App;
