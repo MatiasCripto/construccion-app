@@ -7,17 +7,23 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
     const [audioBlob, setAudioBlob] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState(null);
-    const [hasPermissions, setHasPermissions] = useState(null); // null = checking, true = yes, false = no
-    const [showPermissionRequest, setShowPermissionRequest] = useState(false);
     
     const mediaRecorderRef = useRef(null);
     const streamRef = useRef(null);
     const chunksRef = useRef([]);
     const timerRef = useRef(null);
 
-    // Verificar permisos al cargar
+    // Limpiar al desmontar
     useEffect(() => {
-        checkPermissionsOnLoad();
+        return () => {
+            stopRecording();
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
     }, []);
 
     // Timer para grabación
@@ -39,95 +45,6 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         };
     }, [isRecording, isPaused]);
 
-    // Limpiar al desmontar
-    useEffect(() => {
-        return () => {
-            stopRecording();
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-            }
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
-        };
-    }, []);
-
-    const checkPermissionsOnLoad = async () => {
-        try {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                setHasPermissions(false);
-                setError('Tu dispositivo no soporta grabación de audio');
-                return;
-            }
-
-            // Verificar si hay dispositivos de audio disponibles
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const hasAudioInput = devices.some(device => device.kind === 'audioinput');
-            
-            if (!hasAudioInput) {
-                setHasPermissions(false);
-                setError('No se encontró micrófono en el dispositivo');
-                return;
-            }
-
-            // Intentar verificar permisos sin solicitar acceso
-            if (navigator.permissions) {
-                try {
-                    const result = await navigator.permissions.query({ name: 'microphone' });
-                    if (result.state === 'granted') {
-                        setHasPermissions(true);
-                    } else if (result.state === 'denied') {
-                        setHasPermissions(false);
-                        setError('Permisos de micrófono denegados. Ve a configuración para habilitarlos.');
-                    } else {
-                        setHasPermissions(null); // Necesita solicitar permisos
-                    }
-                } catch (err) {
-                    setHasPermissions(null); // No se puede verificar, solicitar cuando sea necesario
-                }
-            } else {
-                setHasPermissions(null); // No se puede verificar, solicitar cuando sea necesario
-            }
-        } catch (err) {
-            console.error('Error verificando permisos:', err);
-            setHasPermissions(null);
-        }
-    };
-
-    const requestPermissions = async () => {
-        try {
-            setError(null);
-            setShowPermissionRequest(false);
-            
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    sampleRate: 44100
-                } 
-            });
-            
-            // Detener inmediatamente, solo estamos verificando permisos
-            stream.getTracks().forEach(track => track.stop());
-            
-            setHasPermissions(true);
-            console.log('✅ Permisos de micrófono concedidos');
-            
-        } catch (err) {
-            console.error('❌ Error solicitando permisos:', err);
-            setHasPermissions(false);
-            
-            if (err.name === 'NotAllowedError') {
-                setError('Permisos de micrófono denegados. Ve a configuración de la app para habilitarlos.');
-            } else if (err.name === 'NotFoundError') {
-                setError('No se encontró micrófono en el dispositivo');
-            } else {
-                setError('Error al acceder al micrófono: ' + err.message);
-            }
-        }
-    };
-
     const formatTime = (seconds) => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
@@ -138,12 +55,9 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         try {
             setError(null);
             
-            // Si no sabemos el estado de permisos o están denegados, solicitar
-            if (hasPermissions === null || hasPermissions === false) {
-                setShowPermissionRequest(true);
-                return;
-            }
+            console.log('🎙️ Solicitando permiso de micrófono...');
             
+            // Solicitar acceso al micrófono JUSTO cuando se necesita
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: true,
@@ -153,20 +67,27 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                 } 
             });
             
+            console.log('✅ Permiso de micrófono concedido');
+            
             streamRef.current = stream;
             chunksRef.current = [];
 
-            // Configurar MediaRecorder
+            // Detectar mejor formato soportado
             let mimeType = 'audio/webm;codecs=opus';
             if (!MediaRecorder.isTypeSupported(mimeType)) {
                 mimeType = 'audio/webm';
                 if (!MediaRecorder.isTypeSupported(mimeType)) {
                     mimeType = 'audio/mp4';
                     if (!MediaRecorder.isTypeSupported(mimeType)) {
-                        mimeType = '';
+                        mimeType = 'audio/wav';
+                        if (!MediaRecorder.isTypeSupported(mimeType)) {
+                            mimeType = ''; // Usar default
+                        }
                     }
                 }
             }
+
+            console.log('🎵 Usando formato:', mimeType || 'default');
 
             const mediaRecorder = new MediaRecorder(stream, {
                 mimeType: mimeType || undefined,
@@ -178,32 +99,46 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     chunksRef.current.push(event.data);
+                    console.log('📦 Chunk grabado:', event.data.size, 'bytes');
                 }
             };
 
             mediaRecorder.onstop = () => {
+                console.log('⏹️ Grabación detenida, creando blob...');
                 const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' });
+                console.log('✅ Blob creado:', blob.size, 'bytes');
                 setAudioBlob(blob);
                 
+                // Detener stream
                 if (streamRef.current) {
                     streamRef.current.getTracks().forEach(track => track.stop());
                     streamRef.current = null;
                 }
             };
 
-            mediaRecorder.start(1000);
+            mediaRecorder.onerror = (event) => {
+                console.error('❌ Error en MediaRecorder:', event.error);
+                setError('Error durante la grabación: ' + event.error);
+            };
+
+            mediaRecorder.start(1000); // Chunk cada segundo
             setIsRecording(true);
             setRecordingTime(0);
+            console.log('🔴 Grabación iniciada');
 
         } catch (err) {
-            console.error('Error al iniciar grabación:', err);
+            console.error('❌ Error al iniciar grabación:', err);
+            
             if (err.name === 'NotAllowedError') {
-                setHasPermissions(false);
-                setError('Permisos de micrófono denegados. Ve a configuración para habilitarlos.');
+                setError('🚫 Permiso de micrófono denegado. Ve a configuración de la app y permite el acceso al micrófono.');
             } else if (err.name === 'NotFoundError') {
-                setError('No se encontró micrófono en el dispositivo');
+                setError('🎙️ No se encontró micrófono en el dispositivo');
+            } else if (err.name === 'NotSupportedError') {
+                setError('📱 Tu dispositivo no soporta grabación de audio');
+            } else if (err.name === 'NotReadableError') {
+                setError('🔧 El micrófono está siendo usado por otra app');
             } else {
-                setError('Error al iniciar grabación: ' + err.message);
+                setError('❌ Error inesperado: ' + err.message);
             }
         }
     };
@@ -211,28 +146,41 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
     const togglePause = () => {
         if (!mediaRecorderRef.current) return;
 
-        if (isPaused) {
-            mediaRecorderRef.current.resume();
-            setIsPaused(false);
-        } else {
-            mediaRecorderRef.current.pause();
-            setIsPaused(true);
+        try {
+            if (isPaused) {
+                mediaRecorderRef.current.resume();
+                setIsPaused(false);
+                console.log('▶️ Grabación reanudada');
+            } else {
+                mediaRecorderRef.current.pause();
+                setIsPaused(true);
+                console.log('⏸️ Grabación pausada');
+            }
+        } catch (err) {
+            console.error('Error al pausar/reanudar:', err);
+            setError('Error al pausar grabación');
         }
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-            mediaRecorderRef.current.stop();
-        }
-        setIsRecording(false);
-        setIsPaused(false);
-        
-        if (timerRef.current) {
-            clearInterval(timerRef.current);
+        try {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                mediaRecorderRef.current.stop();
+                console.log('🛑 Deteniendo grabación...');
+            }
+            setIsRecording(false);
+            setIsPaused(false);
+            
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        } catch (err) {
+            console.error('Error al detener grabación:', err);
         }
     };
 
     const cancelRecording = () => {
+        console.log('❌ Cancelando grabación...');
         stopRecording();
         setAudioBlob(null);
         setRecordingTime(0);
@@ -246,10 +194,12 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         setError(null);
 
         try {
+            console.log('☁️ Subiendo audio a Cloudinary...', audioBlob.size, 'bytes');
+            
             const formData = new FormData();
             formData.append('file', audioBlob, `audio_${Date.now()}.webm`);
             formData.append('upload_preset', 'construccion_preset');
-            formData.append('resource_type', 'video');
+            formData.append('resource_type', 'video'); // Para audio
 
             const response = await fetch(
                 'https://api.cloudinary.com/v1_1/dt6uqdij7/video/upload',
@@ -260,11 +210,13 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
             );
 
             if (!response.ok) {
-                throw new Error('Error al subir audio');
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
             const result = await response.json();
+            console.log('✅ Audio subido exitosamente:', result.secure_url);
             
+            // Llamar callback con información del audio
             onAudioRecorded({
                 url: result.secure_url,
                 duration: recordingTime,
@@ -272,12 +224,13 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                 format: result.format
             });
 
+            // Limpiar estado
             setAudioBlob(null);
             setRecordingTime(0);
 
         } catch (err) {
-            console.error('Error al subir audio:', err);
-            setError('Error al subir el audio. Intenta nuevamente.');
+            console.error('❌ Error al subir audio:', err);
+            setError('Error al subir el audio. Verifica tu conexión e intenta nuevamente.');
         } finally {
             setIsUploading(false);
         }
@@ -286,95 +239,58 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
     const playPreview = () => {
         if (!audioBlob) return;
 
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-        audio.play().catch(err => {
-            console.error('Error al reproducir preview:', err);
-        });
+        try {
+            console.log('🔊 Reproduciendo preview...');
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            audio.play().catch(err => {
+                console.error('Error reproduciendo preview:', err);
+                setError('Error al reproducir audio');
+            });
 
-        audio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-        };
-    };
-
-    const openSettings = () => {
-        if (window.Capacitor?.isNativePlatform()) {
-            alert('Ve a Configuración > Apps > Construcción Pro > Permisos > Micrófono y actívalo');
-        } else {
-            alert('Ve a configuración del navegador y permite el acceso al micrófono para este sitio');
+            audio.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+                console.log('🔇 Preview terminado');
+            };
+        } catch (err) {
+            console.error('Error creando preview:', err);
+            setError('Error al crear preview del audio');
         }
     };
 
-    // Pantalla de solicitud de permisos
-    if (showPermissionRequest) {
-        return (
-            <div className="audio-recorder bg-white rounded-lg p-4 shadow-lg border">
-                <div className="text-center">
-                    <div className="mb-4">
-                        <svg className="w-16 h-16 mx-auto text-orange-400 mb-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-                        </svg>
-                        <h3 className="text-lg font-semibold mb-2">🎙️ Permiso de Micrófono</h3>
-                        <p className="text-gray-600 text-sm mb-4">
-                            Para grabar audios necesitamos acceso al micrófono
-                        </p>
-                        
-                        <div className="space-y-3">
-                            <button
-                                onClick={requestPermissions}
-                                className="w-full bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
-                            >
-                                🔓 Permitir Micrófono
-                            </button>
-                            
-                            <button
-                                onClick={() => setShowPermissionRequest(false)}
-                                className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-2 rounded-lg font-medium transition-colors"
-                            >
-                                Cancelar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    const openMicrophoneSettings = () => {
+        if (window.Capacitor?.isNativePlatform()) {
+            alert('Ve a:\nConfiguración → Apps → Construcción Pro → Permisos → Micrófono\n\nY activa el permiso manualmente');
+        } else {
+            alert('En tu navegador:\n1. Toca el icono de candado 🔒 en la barra de direcciones\n2. Permite el acceso al micrófono\n3. Recarga la página');
+        }
+    };
 
-    // Pantalla de error sin permisos
-    if (hasPermissions === false) {
+    // Verificar si el navegador soporta grabación
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         return (
             <div className="audio-recorder bg-red-50 rounded-lg p-4 border border-red-200">
                 <div className="text-center">
                     <div className="text-red-500 text-4xl mb-2">🚫</div>
-                    <h3 className="font-semibold text-red-800 mb-2">Micrófono no disponible</h3>
-                    <p className="text-red-700 text-sm mb-4">{error}</p>
-                    
-                    <div className="space-y-2">
-                        <button
-                            onClick={checkPermissionsOnLoad}
-                            className="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
-                        >
-                            🔄 Reintentar
-                        </button>
-                        
-                        <button
-                            onClick={openSettings}
-                            className="w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
-                        >
-                            ⚙️ Ir a Configuración
-                        </button>
-                    </div>
+                    <h3 className="font-semibold text-red-800 mb-2">No compatible</h3>
+                    <p className="text-red-700 text-sm">Tu dispositivo no soporta grabación de audio</p>
                 </div>
             </div>
         );
     }
 
-    // Interfaz normal de grabación
     return (
         <div className="audio-recorder bg-white rounded-lg p-4 shadow-lg border">
             {error && (
-                <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-                    {error}
+                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="text-red-700 text-sm mb-2">{error}</div>
+                    <button
+                        onClick={openMicrophoneSettings}
+                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs transition-colors"
+                    >
+                        ⚙️ Ir a Configuración
+                    </button>
                 </div>
             )}
 
@@ -383,7 +299,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                     <button
                         onClick={startRecording}
                         disabled={disabled || isUploading}
-                        className="bg-red-500 hover:bg-red-600 disabled:bg-gray-300 text-white rounded-full p-4 transition-colors"
+                        className="bg-red-500 hover:bg-red-600 disabled:bg-gray-300 text-white rounded-full p-4 transition-colors touch-target"
                         title="Iniciar grabación"
                     >
                         <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
@@ -393,6 +309,9 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                     <div className="mt-2 text-sm text-gray-600">
                         Toca para grabar audio
                     </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                        Se solicitará permiso de micrófono
+                    </div>
                 </div>
             )}
 
@@ -401,7 +320,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                     <div className="flex items-center justify-center space-x-4 mb-4">
                         <div className="flex items-center space-x-2">
                             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                            <span className="text-lg font-mono font-bold">
+                            <span className="text-lg font-mono font-bold text-red-600">
                                 {formatTime(recordingTime)}
                             </span>
                         </div>
@@ -410,7 +329,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                     <div className="flex justify-center space-x-3">
                         <button
                             onClick={togglePause}
-                            className="bg-yellow-500 hover:bg-yellow-600 text-white rounded-full p-3 transition-colors"
+                            className="bg-yellow-500 hover:bg-yellow-600 text-white rounded-full p-3 transition-colors touch-target"
                             title={isPaused ? "Reanudar" : "Pausar"}
                         >
                             {isPaused ? (
@@ -426,7 +345,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
 
                         <button
                             onClick={stopRecording}
-                            className="bg-gray-600 hover:bg-gray-700 text-white rounded-full p-3 transition-colors"
+                            className="bg-gray-600 hover:bg-gray-700 text-white rounded-full p-3 transition-colors touch-target"
                             title="Detener grabación"
                         >
                             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -436,7 +355,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
 
                         <button
                             onClick={cancelRecording}
-                            className="bg-red-500 hover:bg-red-600 text-white rounded-full p-3 transition-colors"
+                            className="bg-red-500 hover:bg-red-600 text-white rounded-full p-3 transition-colors touch-target"
                             title="Cancelar grabación"
                         >
                             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -446,7 +365,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                     </div>
 
                     <div className="mt-2 text-sm text-gray-600">
-                        {isPaused ? "Grabación pausada" : "Grabando..."}
+                        {isPaused ? "⏸️ Grabación pausada" : "🔴 Grabando..."}
                     </div>
                 </div>
             )}
@@ -454,14 +373,14 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
             {audioBlob && !isRecording && (
                 <div className="text-center">
                     <div className="mb-4">
-                        <div className="text-lg font-semibold mb-2">
-                            Audio grabado - {formatTime(recordingTime)}
+                        <div className="text-lg font-semibold mb-2 text-green-600">
+                            ✅ Audio grabado - {formatTime(recordingTime)}
                         </div>
                         
                         <div className="flex justify-center space-x-3 mb-4">
                             <button
                                 onClick={playPreview}
-                                className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-3 transition-colors"
+                                className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-3 transition-colors touch-target"
                                 title="Reproducir preview"
                             >
                                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -474,7 +393,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                             <button
                                 onClick={uploadAudio}
                                 disabled={isUploading}
-                                className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-6 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+                                className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2"
                             >
                                 {isUploading ? (
                                     <>
@@ -486,7 +405,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
                                         </svg>
-                                        <span>Enviar</span>
+                                        <span>Enviar Audio</span>
                                     </>
                                 )}
                             </button>
@@ -494,7 +413,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                             <button
                                 onClick={cancelRecording}
                                 disabled={isUploading}
-                                className="bg-gray-500 hover:bg-gray-600 disabled:bg-gray-300 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
+                                className="bg-gray-500 hover:bg-gray-600 disabled:bg-gray-300 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
                             >
                                 Cancelar
                             </button>

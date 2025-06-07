@@ -53,20 +53,16 @@ const App = () => {
     );
   }
 
-  // 🔧 INTEGRACIÓN CON PERMISOS - Solo envuelvo el contenido existente
+  // 🎯 SIN PermissionsManager - App normal
   return (
-    <PermissionsManager requiredPermissions={['camera', 'microphone', 'location']}>
-      <div className="min-h-screen">
-        {user ? (
-          <Dashboard user={user} onLogout={handleLogout} />
-        ) : (
-          <Login onLogin={handleLogin} />
-        )}
-      </div>
-    </PermissionsManager>
+    <div className="min-h-screen">
+      {user ? (
+        <Dashboard user={user} onLogout={handleLogout} />
+      ) : (
+        <Login onLogin={handleLogin} />
+      )}
+    </div>
   );
 };
-
-window.App = App;
 
 window.App = App;
