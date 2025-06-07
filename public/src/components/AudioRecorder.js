@@ -7,32 +7,20 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
     const [audioBlob, setAudioBlob] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState(null);
-    const [hasPermissions, setHasPermissions] = useState(false);
+    const [hasPermissions, setHasPermissions] = useState(null); // null = checking, true = yes, false = no
+    const [showPermissionRequest, setShowPermissionRequest] = useState(false);
     
     const mediaRecorderRef = useRef(null);
     const streamRef = useRef(null);
     const chunksRef = useRef([]);
     const timerRef = useRef(null);
 
-    // Verificar y solicitar permisos al cargar
+    // Verificar permisos al cargar
     useEffect(() => {
-        checkAndRequestPermissions();
+        checkPermissionsOnLoad();
     }, []);
 
-    // Limpiar recursos al desmontar
-    useEffect(() => {
-        return () => {
-            stopRecording();
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-            }
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
-        };
-    }, []);
-
-    // Timer para mostrar duración de grabación
+    // Timer para grabación
     useEffect(() => {
         if (isRecording && !isPaused) {
             timerRef.current = setInterval(() => {
@@ -51,104 +39,111 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         };
     }, [isRecording, isPaused]);
 
-    // Verificar y solicitar permisos
-    const checkAndRequestPermissions = async () => {
+    // Limpiar al desmontar
+    useEffect(() => {
+        return () => {
+            stopRecording();
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, []);
+
+    const checkPermissionsOnLoad = async () => {
         try {
-            // Detectar si estamos en Capacitor (app nativa)
-            if (window.Capacitor) {
-                const { Device } = window.Capacitor.Plugins;
-                const info = await Device.getInfo();
-                
-                if (info.platform === 'android' || info.platform === 'ios') {
-                    await requestNativePermissions();
-                } else {
-                    await requestWebPermissions();
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                setHasPermissions(false);
+                setError('Tu dispositivo no soporta grabación de audio');
+                return;
+            }
+
+            // Verificar si hay dispositivos de audio disponibles
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const hasAudioInput = devices.some(device => device.kind === 'audioinput');
+            
+            if (!hasAudioInput) {
+                setHasPermissions(false);
+                setError('No se encontró micrófono en el dispositivo');
+                return;
+            }
+
+            // Intentar verificar permisos sin solicitar acceso
+            if (navigator.permissions) {
+                try {
+                    const result = await navigator.permissions.query({ name: 'microphone' });
+                    if (result.state === 'granted') {
+                        setHasPermissions(true);
+                    } else if (result.state === 'denied') {
+                        setHasPermissions(false);
+                        setError('Permisos de micrófono denegados. Ve a configuración para habilitarlos.');
+                    } else {
+                        setHasPermissions(null); // Necesita solicitar permisos
+                    }
+                } catch (err) {
+                    setHasPermissions(null); // No se puede verificar, solicitar cuando sea necesario
                 }
             } else {
-                // Entorno web
-                await requestWebPermissions();
+                setHasPermissions(null); // No se puede verificar, solicitar cuando sea necesario
             }
         } catch (err) {
             console.error('Error verificando permisos:', err);
-            setError('Error al verificar permisos de micrófono');
+            setHasPermissions(null);
         }
     };
 
-    // Solicitar permisos nativos (Capacitor)
-    const requestNativePermissions = async () => {
+    const requestPermissions = async () => {
         try {
-            if (window.Capacitor?.Plugins?.Media) {
-                const { Media } = window.Capacitor.Plugins;
-                
-                // Solicitar permisos de micrófono
-                const permission = await Media.requestPermissions();
-                
-                if (permission.microphone === 'granted') {
-                    setHasPermissions(true);
-                    setError(null);
-                } else {
-                    setError('Se necesitan permisos de micrófono para grabar audio');
-                    setHasPermissions(false);
-                }
-            } else {
-                // Fallback a permisos web si Media plugin no está disponible
-                await requestWebPermissions();
-            }
-        } catch (err) {
-            console.error('Error solicitando permisos nativos:', err);
-            setError('Error al solicitar permisos de micrófono');
-        }
-    };
-
-    // Solicitar permisos web
-    const requestWebPermissions = async () => {
-        try {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('API de micrófono no disponible');
-            }
-
-            // Solicitar acceso al micrófono
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setError(null);
+            setShowPermissionRequest(false);
             
-            // Detener inmediatamente (solo estamos probando permisos)
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    sampleRate: 44100
+                } 
+            });
+            
+            // Detener inmediatamente, solo estamos verificando permisos
             stream.getTracks().forEach(track => track.stop());
             
             setHasPermissions(true);
-            setError(null);
+            console.log('✅ Permisos de micrófono concedidos');
+            
         } catch (err) {
-            console.error('Error solicitando permisos web:', err);
+            console.error('❌ Error solicitando permisos:', err);
+            setHasPermissions(false);
+            
             if (err.name === 'NotAllowedError') {
-                setError('Permisos de micrófono denegados. Por favor, permite el acceso al micrófono en la configuración de la app.');
+                setError('Permisos de micrófono denegados. Ve a configuración de la app para habilitarlos.');
             } else if (err.name === 'NotFoundError') {
                 setError('No se encontró micrófono en el dispositivo');
             } else {
                 setError('Error al acceder al micrófono: ' + err.message);
             }
-            setHasPermissions(false);
         }
     };
 
-    // Formatear tiempo de grabación
     const formatTime = (seconds) => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // Iniciar grabación
     const startRecording = async () => {
         try {
             setError(null);
             
-            // Verificar permisos antes de grabar
-            if (!hasPermissions) {
-                await checkAndRequestPermissions();
-                if (!hasPermissions) {
-                    return;
-                }
+            // Si no sabemos el estado de permisos o están denegados, solicitar
+            if (hasPermissions === null || hasPermissions === false) {
+                setShowPermissionRequest(true);
+                return;
             }
             
-            // Solicitar acceso al micrófono
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: true,
@@ -161,7 +156,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
             streamRef.current = stream;
             chunksRef.current = [];
 
-            // Configurar MediaRecorder con mejor calidad
+            // Configurar MediaRecorder
             let mimeType = 'audio/webm;codecs=opus';
             if (!MediaRecorder.isTypeSupported(mimeType)) {
                 mimeType = 'audio/webm';
@@ -190,21 +185,21 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                 const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' });
                 setAudioBlob(blob);
                 
-                // Detener stream
                 if (streamRef.current) {
                     streamRef.current.getTracks().forEach(track => track.stop());
                     streamRef.current = null;
                 }
             };
 
-            mediaRecorder.start(1000); // Recopilar datos cada segundo
+            mediaRecorder.start(1000);
             setIsRecording(true);
             setRecordingTime(0);
 
         } catch (err) {
             console.error('Error al iniciar grabación:', err);
             if (err.name === 'NotAllowedError') {
-                setError('Permisos de micrófono denegados. Ve a configuración y permite el acceso al micrófono.');
+                setHasPermissions(false);
+                setError('Permisos de micrófono denegados. Ve a configuración para habilitarlos.');
             } else if (err.name === 'NotFoundError') {
                 setError('No se encontró micrófono en el dispositivo');
             } else {
@@ -213,7 +208,6 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         }
     };
 
-    // Pausar/reanudar grabación
     const togglePause = () => {
         if (!mediaRecorderRef.current) return;
 
@@ -226,7 +220,6 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         }
     };
 
-    // Detener grabación
     const stopRecording = () => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
             mediaRecorderRef.current.stop();
@@ -239,7 +232,6 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         }
     };
 
-    // Cancelar grabación
     const cancelRecording = () => {
         stopRecording();
         setAudioBlob(null);
@@ -247,7 +239,6 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         setError(null);
     };
 
-    // Subir audio a Cloudinary
     const uploadAudio = async () => {
         if (!audioBlob) return;
 
@@ -258,7 +249,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
             const formData = new FormData();
             formData.append('file', audioBlob, `audio_${Date.now()}.webm`);
             formData.append('upload_preset', 'construccion_preset');
-            formData.append('resource_type', 'video'); // Para audio también usar 'video'
+            formData.append('resource_type', 'video');
 
             const response = await fetch(
                 'https://api.cloudinary.com/v1_1/dt6uqdij7/video/upload',
@@ -274,7 +265,6 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
 
             const result = await response.json();
             
-            // Llamar callback con información del audio
             onAudioRecorded({
                 url: result.secure_url,
                 duration: recordingTime,
@@ -282,7 +272,6 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
                 format: result.format
             });
 
-            // Limpiar estado
             setAudioBlob(null);
             setRecordingTime(0);
 
@@ -294,7 +283,6 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         }
     };
 
-    // Reproducir audio grabado (preview)
     const playPreview = () => {
         if (!audioBlob) return;
 
@@ -304,35 +292,76 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
             console.error('Error al reproducir preview:', err);
         });
 
-        // Limpiar URL después de reproducir
         audio.onended = () => {
             URL.revokeObjectURL(audioUrl);
         };
     };
 
-    // Componente para solicitar permisos
-    if (!hasPermissions) {
+    const openSettings = () => {
+        if (window.Capacitor?.isNativePlatform()) {
+            alert('Ve a Configuración > Apps > Construcción Pro > Permisos > Micrófono y actívalo');
+        } else {
+            alert('Ve a configuración del navegador y permite el acceso al micrófono para este sitio');
+        }
+    };
+
+    // Pantalla de solicitud de permisos
+    if (showPermissionRequest) {
         return (
             <div className="audio-recorder bg-white rounded-lg p-4 shadow-lg border">
                 <div className="text-center">
                     <div className="mb-4">
-                        <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="w-16 h-16 mx-auto text-orange-400 mb-4" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
                         </svg>
-                        <h3 className="text-lg font-semibold mb-2">Permisos de Micrófono</h3>
+                        <h3 className="text-lg font-semibold mb-2">🎙️ Permiso de Micrófono</h3>
                         <p className="text-gray-600 text-sm mb-4">
                             Para grabar audios necesitamos acceso al micrófono
                         </p>
-                        {error && (
-                            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-                                {error}
-                            </div>
-                        )}
+                        
+                        <div className="space-y-3">
+                            <button
+                                onClick={requestPermissions}
+                                className="w-full bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                            >
+                                🔓 Permitir Micrófono
+                            </button>
+                            
+                            <button
+                                onClick={() => setShowPermissionRequest(false)}
+                                className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-2 rounded-lg font-medium transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Pantalla de error sin permisos
+    if (hasPermissions === false) {
+        return (
+            <div className="audio-recorder bg-red-50 rounded-lg p-4 border border-red-200">
+                <div className="text-center">
+                    <div className="text-red-500 text-4xl mb-2">🚫</div>
+                    <h3 className="font-semibold text-red-800 mb-2">Micrófono no disponible</h3>
+                    <p className="text-red-700 text-sm mb-4">{error}</p>
+                    
+                    <div className="space-y-2">
                         <button
-                            onClick={checkAndRequestPermissions}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
+                            onClick={checkPermissionsOnLoad}
+                            className="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
                         >
-                            Permitir Micrófono
+                            🔄 Reintentar
+                        </button>
+                        
+                        <button
+                            onClick={openSettings}
+                            className="w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+                        >
+                            ⚙️ Ir a Configuración
                         </button>
                     </div>
                 </div>
@@ -340,17 +369,7 @@ const AudioRecorder = ({ onAudioRecorded, disabled = false }) => {
         );
     }
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        return (
-            <div className="text-center p-4 bg-red-50 rounded-lg">
-                <div className="text-red-600 mb-2">❌</div>
-                <div className="text-sm text-red-700">
-                    Tu dispositivo no soporta grabación de audio
-                </div>
-            </div>
-        );
-    }
-
+    // Interfaz normal de grabación
     return (
         <div className="audio-recorder bg-white rounded-lg p-4 shadow-lg border">
             {error && (
