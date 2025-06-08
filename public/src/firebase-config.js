@@ -1,4 +1,4 @@
-// firebase-config.js
+// firebase-config.js - VERSIÓN CORREGIDA SIN ÍNDICES
 // Configuración Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyDMIBS-LzegVdML_x37iPlA8gOqrs7Vkxk",
@@ -20,7 +20,7 @@ const analytics = firebase.analytics();
 
 // Configuración Cloudinary
 const cloudinaryConfig = {
-  cloudName: 'dt6uqdij7', // Pon tu cloud name aquí
+  cloudName: 'dt6uqdij7',
   uploadPreset: 'construccion_preset'
 };
 
@@ -42,9 +42,7 @@ const cloudinaryWidget = cloudinary.createUploadWidget(
   (error, result) => {
     if (!error && result && result.event === "success") {
       console.log('Foto subida:', result.info);
-      // Aquí manejaremos la foto subida
       window.lastUploadedPhoto = result.info;
-      // Disparar evento personalizado
       window.dispatchEvent(new CustomEvent('photoUploaded', {
         detail: result.info
       }));
@@ -52,7 +50,7 @@ const cloudinaryWidget = cloudinary.createUploadWidget(
   }
 );
 
-// Funciones de utilidad
+// Funciones de utilidad CORREGIDAS
 const FirebaseService = {
   // Autenticación
   async signIn(email, password) {
@@ -67,7 +65,6 @@ const FirebaseService = {
   async signUp(email, password, userData) {
     try {
       const result = await auth.createUserWithEmailAndPassword(email, password);
-      // Guardar datos adicionales del usuario
       await this.createUserDocument(result.user.uid, userData);
       return { success: true, user: result.user };
     } catch (error) {
@@ -116,7 +113,7 @@ const FirebaseService = {
       query = query.where('clienteId', '==', userId);
     }
     
-    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const snapshot = await query.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
@@ -128,28 +125,107 @@ const FirebaseService = {
     });
   },
 
+  // ==================== MENSAJES CORREGIDOS ====================
+  
   async addMensaje(obraId, mensaje) {
-    return await db.collection('mensajes').add({
-      obraId,
-      ...mensaje,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    try {
+      console.log('🔥 Firebase: Guardando mensaje...', {
+        obraId,
+        tipo: mensaje.type,
+        usuario: mensaje.userName
+      });
+      
+      const docRef = await db.collection('mensajes').add({
+        obraId,
+        ...mensaje,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      
+      console.log('✅ Firebase: Mensaje guardado con ID:', docRef.id);
+      return docRef;
+      
+    } catch (error) {
+      console.error('❌ Firebase: Error guardando mensaje:', error);
+      throw error;
+    }
   },
 
+  // CORREGIDO: Sin orderBy para evitar índices
   async getMensajes(obraId) {
-    const snapshot = await db.collection('mensajes')
-      .where('obraId', '==', obraId)
-      .orderBy('timestamp', 'asc')
-      .get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    try {
+      console.log('🔥 Firebase: Obteniendo mensajes para obra:', obraId);
+      
+      const snapshot = await db.collection('mensajes')
+        .where('obraId', '==', obraId)
+        .get(); // ← SIN .orderBy() para evitar índice
+      
+      const mensajes = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      }));
+      
+      // Ordenar en JavaScript en lugar de Firestore
+      mensajes.sort((a, b) => {
+        const timeA = a.timestamp?.toDate?.() || new Date(0);
+        const timeB = b.timestamp?.toDate?.() || new Date(0);
+        return timeA - timeB;
+      });
+      
+      console.log('✅ Firebase: Mensajes obtenidos:', mensajes.length);
+      return mensajes;
+      
+    } catch (error) {
+      console.error('❌ Firebase: Error obteniendo mensajes:', error);
+      throw error;
+    }
   },
 
-  // Listener en tiempo real para mensajes
+  // CORREGIDO: Listener en tiempo real sin orderBy
   listenToMensajes(obraId, callback) {
-    return db.collection('mensajes')
-      .where('obraId', '==', obraId)
-      .orderBy('timestamp', 'asc')
-      .onSnapshot(callback);
+    try {
+      console.log('🔥 Firebase: Configurando listener para obra:', obraId);
+      
+      return db.collection('mensajes')
+        .where('obraId', '==', obraId)
+        .onSnapshot((snapshot) => {
+          try {
+            console.log('📨 Firebase: Cambios detectados en mensajes');
+            
+            // Procesar cambios y ordenar en JavaScript
+            const mensajes = snapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+            
+            // Ordenar por timestamp en JavaScript
+            mensajes.sort((a, b) => {
+              const timeA = a.timestamp?.toDate?.() || new Date(0);
+              const timeB = b.timestamp?.toDate?.() || new Date(0);
+              return timeA - timeB;
+            });
+            
+            // Crear snapshot simulado para mantener compatibilidad
+            const fakeSnapshot = {
+              docs: mensajes.map(msg => ({
+                id: msg.id,
+                data: () => msg
+              }))
+            };
+            
+            callback(fakeSnapshot);
+            
+          } catch (error) {
+            console.error('❌ Firebase: Error procesando cambios:', error);
+          }
+        }, (error) => {
+          console.error('❌ Firebase: Error en listener:', error);
+          throw error;
+        });
+        
+    } catch (error) {
+      console.error('❌ Firebase: Error configurando listener:', error);
+      throw error;
+    }
   }
 };
 
