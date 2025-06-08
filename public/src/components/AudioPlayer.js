@@ -1,9 +1,10 @@
+// src/components/AudioPlayer.js - CORREGIDO PARA NaN/Infinity
 const { useState, useRef, useEffect } = React;
 
 const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
-    const [totalDuration, setTotalDuration] = useState(duration);
+    const [totalDuration, setTotalDuration] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [playbackRate, setPlaybackRate] = useState(1);
@@ -16,15 +17,42 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
         if (!audio) return;
 
         // Event listeners para el audio
-        const handleLoadStart = () => setIsLoading(true);
-        const handleCanPlay = () => setIsLoading(false);
+        const handleLoadStart = () => {
+            setIsLoading(true);
+            setError(null);
+        };
+        
+        const handleCanPlay = () => {
+            setIsLoading(false);
+        };
+        
         const handleLoadedMetadata = () => {
-            setTotalDuration(audio.duration);
+            const audioDuration = audio.duration;
+            console.log('🎵 Audio metadata cargado:', {
+                duration: audioDuration,
+                isFinite: Number.isFinite(audioDuration),
+                propDuration: duration
+            });
+            
+            // CORREGIR NaN/Infinity
+            if (Number.isFinite(audioDuration) && audioDuration > 0) {
+                setTotalDuration(audioDuration);
+            } else if (duration && Number.isFinite(duration) && duration > 0) {
+                // Usar duración pasada como prop si la del audio no es válida
+                setTotalDuration(duration);
+            } else {
+                // Fallback a 0 si ambas son inválidas
+                setTotalDuration(0);
+                console.warn('⚠️ Duración de audio no válida, usando 0');
+            }
             setError(null);
         };
         
         const handleTimeUpdate = () => {
-            setCurrentTime(audio.currentTime);
+            const currentAudioTime = audio.currentTime;
+            if (Number.isFinite(currentAudioTime)) {
+                setCurrentTime(currentAudioTime);
+            }
         };
         
         const handleEnded = () => {
@@ -33,10 +61,10 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
         };
         
         const handleError = (e) => {
+            console.error('❌ Error en audio:', e);
             setError('Error al cargar el audio');
             setIsLoading(false);
             setIsPlaying(false);
-            console.error('Audio error:', e);
         };
 
         const handlePlay = () => setIsPlaying(true);
@@ -68,13 +96,23 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
             audio.removeEventListener('play', handlePlay);
             audio.removeEventListener('pause', handlePause);
         };
-    }, [audioUrl, autoPlay]);
+    }, [audioUrl, autoPlay, duration]);
 
-    // Formatear tiempo
+    // Formatear tiempo - CORREGIDO para evitar NaN
     const formatTime = (time) => {
-        if (isNaN(time)) return '00:00';
+        // Verificar que el tiempo sea un número válido
+        if (!Number.isFinite(time) || time < 0) {
+            return '00:00';
+        }
+        
         const minutes = Math.floor(time / 60);
         const seconds = Math.floor(time % 60);
+        
+        // Verificar que minutes y seconds sean válidos
+        if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+            return '00:00';
+        }
+        
         return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     };
 
@@ -101,7 +139,7 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
     const handleProgressClick = (e) => {
         const audio = audioRef.current;
         const progressBar = progressRef.current;
-        if (!audio || !progressBar) return;
+        if (!audio || !progressBar || !Number.isFinite(totalDuration) || totalDuration <= 0) return;
 
         const rect = progressBar.getBoundingClientRect();
         const clickX = e.clientX - rect.left;
@@ -109,8 +147,11 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
         const percentage = clickX / width;
         const newTime = percentage * totalDuration;
         
-        audio.currentTime = newTime;
-        setCurrentTime(newTime);
+        // Verificar que newTime sea válido
+        if (Number.isFinite(newTime) && newTime >= 0 && newTime <= totalDuration) {
+            audio.currentTime = newTime;
+            setCurrentTime(newTime);
+        }
     };
 
     // Cambiar velocidad de reproducción
@@ -130,19 +171,23 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
     // Retroceder 15 segundos
     const skipBackward = () => {
         const audio = audioRef.current;
-        if (!audio) return;
-        audio.currentTime = Math.max(0, audio.currentTime - 15);
+        if (!audio || !Number.isFinite(currentTime)) return;
+        const newTime = Math.max(0, currentTime - 15);
+        audio.currentTime = newTime;
     };
 
     // Avanzar 15 segundos
     const skipForward = () => {
         const audio = audioRef.current;
-        if (!audio) return;
-        audio.currentTime = Math.min(totalDuration, audio.currentTime + 15);
+        if (!audio || !Number.isFinite(currentTime) || !Number.isFinite(totalDuration)) return;
+        const newTime = Math.min(totalDuration, currentTime + 15);
+        audio.currentTime = newTime;
     };
 
-    // Calcular progreso
-    const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
+    // Calcular progreso - CORREGIDO para evitar NaN
+    const progress = (Number.isFinite(totalDuration) && totalDuration > 0 && Number.isFinite(currentTime)) 
+        ? (currentTime / totalDuration) * 100 
+        : 0;
 
     if (error) {
         return (
@@ -193,6 +238,7 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
                         onClick={skipBackward}
                         className="text-gray-600 hover:text-gray-800 p-1"
                         title="Retroceder 15s"
+                        disabled={!Number.isFinite(currentTime)}
                     >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2A5 5 0 0011 9H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -203,6 +249,7 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
                         onClick={skipForward}
                         className="text-gray-600 hover:text-gray-800 p-1"
                         title="Avanzar 15s"
+                        disabled={!Number.isFinite(currentTime) || !Number.isFinite(totalDuration)}
                     >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M12.293 3.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 9H9a5 5 0 00-5 5v2a1 1 0 11-2 0v-2a7 7 0 017-7h5.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -224,7 +271,7 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
                         >
                             <div 
                                 className="bg-blue-500 h-2 rounded-full transition-all duration-100"
-                                style={{ width: `${progress}%` }}
+                                style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
                             />
                         </div>
                         
@@ -264,8 +311,84 @@ const AudioPlayer = ({ audioUrl, duration = 0, className = "", autoPlay = false 
                     )}
                 </div>
             )}
+
+            {/* Debug info - Solo en desarrollo */}
+            {totalDuration === 0 && !isLoading && (
+                <div className="mt-1 text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded">
+                    ⚠️ Duración no detectada - Verifica el archivo de audio
+                </div>
+            )}
+
+            {/* CSS adicional para animaciones */}
+            <style jsx>{`
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
+                }
+                
+                .animate-pulse {
+                    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+                }
+                
+                .animate-spin {
+                    animation: spin 1s linear infinite;
+                }
+                
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                
+                /* Mejorar el cursor en la barra de progreso */
+                .cursor-pointer:hover {
+                    cursor: pointer;
+                }
+                
+                /* Estilos responsivos para móvil */
+                @media (max-width: 640px) {
+                    .audio-player {
+                        padding: 8px;
+                    }
+                    
+                    .audio-player .flex-1 {
+                        min-width: 120px;
+                    }
+                }
+                
+                /* Mejor contraste para botones deshabilitados */
+                button:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+                
+                /* Animación suave para la barra de progreso */
+                .bg-blue-500 {
+                    transition: width 0.1s ease-out;
+                }
+            `}</style>
         </div>
     );
 };
 
+// Versión mejorada con mejor manejo de errores
+const AudioPlayerWithErrorBoundary = (props) => {
+    try {
+        return <AudioPlayer {...props} />;
+    } catch (error) {
+        console.error('❌ Error en AudioPlayer:', error);
+        return (
+            <div className="audio-player-error p-3 bg-red-50 rounded-lg border border-red-200">
+                <div className="flex items-center space-x-2 text-red-700">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm">Error cargando reproductor de audio</span>
+                </div>
+            </div>
+        );
+    }
+};
+
+// Hacer ambas versiones disponibles
 window.AudioPlayer = AudioPlayer;
+window.AudioPlayerWithErrorBoundary = AudioPlayerWithErrorBoundary;
