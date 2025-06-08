@@ -374,30 +374,25 @@ const AgentTrackingPanel = ({ adminId }) => {
     }
   }, [mapReady]);
 
-  if (isLoading) {
+  // Si no hay usuarios con ubicación (SOLO después de cargar)
+  if (!isLoading && realUsers.length === 0) {
     return (
       <div className="flex items-center justify-center h-full bg-gray-50">
         <div className="text-center">
-          <div className="text-6xl mb-4">🗺️</div>
-          <div className="text-xl font-semibold text-gray-700 mb-2">Control de Agentes</div>
-          <div className="text-gray-500 mb-4">{loadingMessage}</div>
-          <div className="spinner w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin mb-4"></div>
-          
-          {/* Debug info */}
-          <div className="text-xs text-gray-400 mb-4">
-            <p>Contenedor del mapa: {mapRef.current ? '✅ Encontrado' : '❌ No encontrado'}</p>
-            <p>Google Maps: {window.google && window.google.maps ? '✅ Cargado' : '⏳ Cargando...'}</p>
+          <div className="text-6xl mb-4">📍</div>
+          <div className="text-xl font-semibold text-gray-700 mb-2">No hay agentes con ubicación</div>
+          <div className="text-gray-500 mb-4">
+            Los empleados deben activar el tracking de ubicación desde sus dispositivos móviles.
           </div>
-          
-          {/* Botón de reintento manual */}
           <button 
             onClick={() => {
-              setLoadingMessage('Reintentando...');
-              initializeGoogleMaps();
+              setIsLoading(true);
+              setLoadingMessage('Actualizando...');
+              loadRealUsers();
             }}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-600 transition-colors"
+            className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600"
           >
-            🔄 Reintentar
+            🔄 Actualizar
           </button>
         </div>
       </div>
@@ -507,8 +502,37 @@ const AgentTrackingPanel = ({ adminId }) => {
           </div>
         </div>
 
+        {/* Loading overlay ENCIMA del mapa */}
+        {isLoading && (
+          <div className="absolute inset-0 bg-white bg-opacity-95 flex items-center justify-center z-50">
+            <div className="text-center">
+              <div className="text-6xl mb-4">🗺️</div>
+              <div className="text-xl font-semibold text-gray-700 mb-2">Control de Agentes</div>
+              <div className="text-gray-500 mb-4">{loadingMessage}</div>
+              <div className="spinner w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin mb-4"></div>
+              
+              {/* Debug info */}
+              <div className="text-xs text-gray-400 mb-4">
+                <p>Contenedor del mapa: {mapRef.current ? '✅ Encontrado' : '❌ No encontrado'}</p>
+                <p>Google Maps: {window.google && window.google.maps ? '✅ Cargado' : '⏳ Cargando...'}</p>
+              </div>
+              
+              {/* Botón de reintento manual */}
+              <button 
+                onClick={() => {
+                  setLoadingMessage('Reintentando...');
+                  initializeGoogleMaps();
+                }}
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-600 transition-colors"
+              >
+                🔄 Reintentar
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Loading overlay si el mapa no está listo */}
-        {!mapReady && (
+        {!mapReady && !isLoading && (
           <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center">
             <div className="text-center">
               <div className="spinner w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin mb-4"></div>
