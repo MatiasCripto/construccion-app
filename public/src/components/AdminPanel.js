@@ -52,13 +52,13 @@ const AdminPanel = () => {
   
   // DATOS DE LA EMPRESA VIVEKA
   const empresaData = {
-    nombre: 'VIVEKA',
-    email: 'vivekaemuna@gmail.com',
-    telefono: '11 24749240',
+    nombre: 'LA EMPRESA....',
+    email: 'JOHNNY@gmail.com',
+    telefono: '11 123456789',
     direccion: 'Consultas por email',
     logo: '🏗️', // Puede ser reemplazado por logo real
     eslogan: 'Construcción Profesional',
-    website: 'Contacto: vivekaemuna@gmail.com'
+    website: 'Contacto: JOHNNY@gmail.com'
   };
   
   const [stats, setStats] = useState({
