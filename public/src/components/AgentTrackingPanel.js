@@ -62,18 +62,29 @@ const AgentTrackingPanel = ({ adminId }) => {
   // Inicializar Google Maps SIN depender de callback
   const initializeGoogleMaps = async () => {
     try {
-      setLoadingMessage('Esperando Google Maps...');
+      setLoadingMessage('Verificando contenedor...');
       
-      // Verificar contenedor
+      // Verificación robusta del contenedor
       if (!mapRef.current) {
         console.error('❌ Contenedor del mapa no encontrado');
+        console.log('🔍 mapRef:', mapRef);
+        console.log('🔍 mapRef.current:', mapRef.current);
+        
+        // Reintentar en 2 segundos
+        setTimeout(() => {
+          console.log('🔄 Reintentando inicialización...');
+          initializeGoogleMaps();
+        }, 2000);
         return;
       }
 
+      console.log('✅ Contenedor del mapa encontrado:', mapRef.current);
+      setLoadingMessage('Esperando Google Maps...');
+      
       // Esperar a que Google Maps esté disponible
       await waitForGoogleMaps();
       
-      setLoadingMessage('Inicializando mapa...');
+      setLoadingMessage('Creando mapa...');
       console.log('🗺️ Inicializando Google Maps...');
 
       const mapOptions = {
@@ -104,8 +115,13 @@ const AgentTrackingPanel = ({ adminId }) => {
       
     } catch (error) {
       console.error('❌ Error inicializando Google Maps:', error);
-      setLoadingMessage('Error cargando Google Maps');
-      setIsLoading(false);
+      setLoadingMessage('Error cargando Google Maps: ' + error.message);
+      
+      // Reintentar en caso de error
+      setTimeout(() => {
+        console.log('🔄 Reintentando después de error...');
+        initializeGoogleMaps();
+      }, 3000);
     }
   };
 
@@ -316,13 +332,25 @@ const AgentTrackingPanel = ({ adminId }) => {
     }
   };
 
-  // Effect para inicializar
+  // Effect para inicializar con verificaciones robustas
   useEffect(() => {
     console.log('🗺️ Inicializando Panel de Control de Agentes REALES...');
     
-    const timer = setTimeout(() => {
-      initializeGoogleMaps();
-    }, 500); // Dar tiempo para que el DOM esté listo
+    const initWithRetry = () => {
+      console.log('🔍 Verificando contenedor del mapa...');
+      console.log('mapRef.current:', mapRef.current);
+      
+      if (mapRef.current) {
+        console.log('✅ Contenedor encontrado, inicializando mapa...');
+        initializeGoogleMaps();
+      } else {
+        console.log('⏳ Contenedor no listo, reintentando en 1 segundo...');
+        setTimeout(initWithRetry, 1000);
+      }
+    };
+
+    // Dar tiempo inicial para que el DOM se renderice
+    const timer = setTimeout(initWithRetry, 1000);
 
     return () => clearTimeout(timer);
   }, []);
@@ -353,7 +381,24 @@ const AgentTrackingPanel = ({ adminId }) => {
           <div className="text-6xl mb-4">🗺️</div>
           <div className="text-xl font-semibold text-gray-700 mb-2">Control de Agentes</div>
           <div className="text-gray-500 mb-4">{loadingMessage}</div>
-          <div className="spinner w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin"></div>
+          <div className="spinner w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin mb-4"></div>
+          
+          {/* Debug info */}
+          <div className="text-xs text-gray-400 mb-4">
+            <p>Contenedor del mapa: {mapRef.current ? '✅ Encontrado' : '❌ No encontrado'}</p>
+            <p>Google Maps: {window.google && window.google.maps ? '✅ Cargado' : '⏳ Cargando...'}</p>
+          </div>
+          
+          {/* Botón de reintento manual */}
+          <button 
+            onClick={() => {
+              setLoadingMessage('Reintentando...');
+              initializeGoogleMaps();
+            }}
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-600 transition-colors"
+          >
+            🔄 Reintentar
+          </button>
         </div>
       </div>
     );
