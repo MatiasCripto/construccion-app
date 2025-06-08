@@ -1,166 +1,75 @@
-// src/components/AgentTrackingPanel.js - HÍBRIDO: Tu debug + Backend+Firebase
+// src/components/AgentTrackingPanel.js - INTEGRADO con LocationTrackingService
 const { useState, useEffect, useRef } = React;
 
 const AgentTrackingPanel = ({ adminId }) => {
   // Estados
-  const [realUsers, setRealUsers] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-  const [onlineCount, setOnlineCount] = useState(0);
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState('Inicializando...');
+  const [stats, setStats] = useState({
+    total: 0,
+    online: 0,
+    offline: 0,
+    withLocation: 0
+  });
   const [debugInfo, setDebugInfo] = useState([]);
+  const [lastUpdate, setLastUpdate] = useState(new Date());
   
   // Referencias
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef({});
-  const retryCount = useRef(0);
+  const locationListener = useRef(null);
 
   // Debug logger
   const addDebug = (message) => {
-    console.log(message);
-    setDebugInfo(prev => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${message}`]);
+    const timestamp = new Date().toLocaleTimeString();
+    const logMessage = `${timestamp}: ${message}`;
+    console.log(logMessage);
+    setDebugInfo(prev => [...prev.slice(-6), logMessage]);
   };
 
-  // Colores por rol
-  const getRoleStyle = (role, isOnline) => {
-    const styles = {
-      admin: { color: '#8B5CF6', icon: '👑', name: 'Admin' },
-      administrador: { color: '#8B5CF6', icon: '👑', name: 'Administrador' },
-      supervisor: { color: '#3B82F6', icon: '🛠️', name: 'Supervisor' },
-      jefe_obra: { color: '#F59E0B', icon: '👨‍💼', name: 'Jefe de Obra' },
-      albañil: { color: '#10B981', icon: '👷', name: 'Albañil' },
-      albanil: { color: '#10B981', icon: '👷', name: 'Albañil' },
-      logistica: { color: '#EF4444', icon: '🚚', name: 'Logística' }
-    };
-    
-    const style = styles[role] || styles.albañil;
-    return { ...style, opacity: isOnline ? 1 : 0.5 };
-  };
-
-  // Cargar Leaflet dinámicamente
-  const loadLeaflet = () => {
-    return new Promise((resolve, reject) => {
-      if (window.L) {
-        addDebug('✅ Leaflet ya disponible');
-        resolve();
-        return;
+  // Cargar empleados con ubicaciones REALES
+  const loadEmployeesWithRealLocations = async () => {
+    try {
+      addDebug('📥 Cargando empleados con ubicaciones REALES...');
+      
+      if (!window.LocationTrackingService) {
+        addDebug('❌ LocationTrackingService no disponible');
+        return [];
       }
 
-      addDebug('📦 Cargando Leaflet...');
+      // Usar el servicio de tracking para obtener empleados con ubicaciones
+      const employeesWithLocations = await window.LocationTrackingService.getAllEmployeesWithLocations();
       
-      // CSS de Leaflet
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
+      addDebug(`✅ ${employeesWithLocations.length} empleados obtenidos del LocationTrackingService`);
+      
+      // Convertir al formato del mapa + agregar empleados del backend
+      let allEmployees = [];
 
-      // JavaScript de Leaflet
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = () => {
-        addDebug('✅ Leaflet cargado exitosamente');
-        resolve();
-      };
-      script.onerror = () => {
-        addDebug('❌ Error cargando Leaflet');
-        reject(new Error('Error cargando Leaflet'));
-      };
-      document.head.appendChild(script);
-    });
-  };
+      // 1. Empleados con LocationTrackingService (ubicaciones reales)
+      const realLocationEmployees = employeesWithLocations.map(emp => ({
+        id: `tracking_${emp.id}`,
+        name: emp.name,
+        email: emp.email,
+        role: emp.role,
+        obra: emp.currentObra,
+        location: emp.location ? {
+          lat: emp.location.latitude,
+          lng: emp.location.longitude,
+          accuracy: emp.location.accuracy,
+          isReal: true
+        } : null,
+        isOnline: emp.location?.isOnline || false,
+        lastSeen: emp.location?.lastSeen || new Date(0),
+        source: 'tracking'
+      }));
 
-  // Verificar contenedor con reintentos
-  const waitForContainer = () => {
-    return new Promise((resolve, reject) => {
-      const checkContainer = () => {
-        addDebug(`🔍 Verificando contenedor... Intento ${retryCount.current + 1}`);
-        addDebug(`📍 mapRef.current: ${mapRef.current ? 'ENCONTRADO' : 'NULL'}`);
-        
-        if (mapRef.current) {
-          addDebug('✅ Contenedor del mapa encontrado');
-          resolve();
-        } else {
-          retryCount.current++;
-          if (retryCount.current < 10) {
-            addDebug(`⏳ Contenedor no listo, reintentando en 1 segundo...`);
-            setTimeout(checkContainer, 1000);
-          } else {
-            addDebug('❌ Timeout esperando contenedor del mapa');
-            reject(new Error('Timeout esperando contenedor'));
-          }
-        }
-      };
-      
-      checkContainer();
-    });
-  };
+      allEmployees = allEmployees.concat(realLocationEmployees);
 
-  // Inicializar mapa
-  const initializeMap = async () => {
-    try {
-      setLoadingMessage('Esperando contenedor del mapa...');
-      addDebug('🗺️ Iniciando inicialización del mapa...');
-      
-      // Esperar contenedor
-      await waitForContainer();
-      
-      setLoadingMessage('Cargando Leaflet...');
-      // Cargar Leaflet
-      await loadLeaflet();
-      
-      setLoadingMessage('Creando mapa...');
-      addDebug('🗺️ Creando instancia del mapa...');
-      
-      // Crear mapa centrado en Buenos Aires
-      mapInstance.current = window.L.map(mapRef.current, {
-        center: [-34.6118, -58.3960],
-        zoom: 12,
-        zoomControl: true,
-        attributionControl: true
-      });
-
-      // Agregar tiles de OpenStreetMap
-      const tileLayer = window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19
-      });
-      
-      tileLayer.addTo(mapInstance.current);
-      
-      // Esperar a que el mapa se renderice completamente
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setMapReady(true);
-      addDebug('✅ Mapa OpenStreetMap inicializado exitosamente');
-      
-      // Cargar usuarios de AMBOS sistemas
-      setLoadingMessage('Cargando usuarios de todos los sistemas...');
-      loadUsersFromAllSources();
-      
-    } catch (error) {
-      addDebug(`❌ Error inicializando mapa: ${error.message}`);
-      setLoadingMessage(`Error: ${error.message}`);
-      
-      // Reintentar después de 3 segundos
-      setTimeout(() => {
-        addDebug('🔄 Reintentando inicialización...');
-        retryCount.current = 0;
-        initializeMap();
-      }, 3000);
-    }
-  };
-
-  // ===== NUEVA FUNCIÓN: Cargar usuarios de TODOS los sistemas =====
-  const loadUsersFromAllSources = async () => {
-    try {
-      addDebug('📥 Cargando usuarios de TODOS los sistemas...');
-      let allUsers = [];
-
-      // 1. BACKEND - Usuarios del AdminPanel
+      // 2. Empleados del backend (AdminPanel) que NO están en tracking
       try {
-        addDebug('🔧 Cargando usuarios del backend (AdminPanel)...');
+        addDebug('🔧 Verificando usuarios del backend...');
         const backendResponse = await fetch('/api/usuarios', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -171,154 +80,236 @@ const AgentTrackingPanel = ({ adminId }) => {
           const backendUsers = await backendResponse.json();
           addDebug(`👥 Backend: ${backendUsers.length} usuarios encontrados`);
           
-          // Convertir formato backend a formato del mapa
-          const convertedUsers = backendUsers.map(user => ({
-            id: `backend_${user.id}`,
-            name: `${user.nombre} ${user.apellido || ''}`.trim(),
-            email: user.email,
-            role: user.rol,
-            obra: user.obra || 'Sin obra asignada',
-            isOnline: user.activo || true,
-            lastSeen: new Date(),
-            source: 'backend',
-            // Ubicaciones distribuidas en Buenos Aires para testing
-            location: {
-              lat: -34.6118 + (Math.random() - 0.5) * 0.02,
-              lng: -58.3960 + (Math.random() - 0.5) * 0.02
-            }
-          }));
-          
-          allUsers = allUsers.concat(convertedUsers);
-          addDebug(`✅ ${convertedUsers.length} usuarios del backend procesados`);
-          
-        } else {
-          addDebug('⚠️ Error accediendo al backend API');
+          const backendEmployees = backendUsers
+            .filter(user => !allEmployees.find(emp => emp.email === user.email))
+            .map(user => ({
+              id: `backend_${user.id}`,
+              name: `${user.nombre} ${user.apellido || ''}`.trim(),
+              email: user.email,
+              role: user.rol,
+              obra: user.obra || 'Sin obra asignada',
+              location: {
+                lat: -34.6118 + (Math.random() - 0.5) * 0.02,
+                lng: -58.3960 + (Math.random() - 0.5) * 0.02,
+                isReal: false
+              },
+              isOnline: user.activo || false,
+              lastSeen: new Date(),
+              source: 'backend'
+            }));
+
+          allEmployees = allEmployees.concat(backendEmployees);
+          addDebug(`✅ ${backendEmployees.length} usuarios del backend agregados`);
         }
       } catch (error) {
         addDebug(`⚠️ Error cargando backend: ${error.message}`);
       }
 
-      // 2. FIREBASE - Usuarios con ubicación real
-      try {
-        addDebug('🔥 Cargando usuarios de Firebase...');
-        if (window.db) {
-          const snapshot = await window.db.collection('usuarios').get();
-          addDebug(`📋 Firebase: ${snapshot.size} usuarios encontrados`);
-          
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            
-            // Solo agregar si no existe ya (evitar duplicados por email)
-            const existingUser = allUsers.find(u => u.email === data.email);
-            if (!existingUser) {
-              const user = {
-                id: `firebase_${doc.id}`,
-                name: data.nombre || data.name || 'Usuario sin nombre',
-                email: data.email || 'sin-email@construccion.com',
-                role: data.rol || data.role || 'albañil',
-                obra: data.obra || 'Sin obra asignada',
-                isOnline: true,
-                lastSeen: new Date(),
-                source: 'firebase',
-                // Ubicaciones distribuidas en Buenos Aires
-                location: data.location || {
-                  lat: -34.6118 + (Math.random() - 0.5) * 0.02,
-                  lng: -58.3960 + (Math.random() - 0.5) * 0.02
-                }
-              };
-              
-              allUsers.push(user);
-              addDebug(`👤 Usuario Firebase: ${user.name} (${user.role})`);
-            } else {
-              addDebug(`🔄 Usuario ya existe: ${data.nombre || data.name}`);
-            }
-          });
-          
-          addDebug(`✅ Usuarios Firebase procesados`);
-        } else {
-          addDebug('⚠️ Firebase no disponible');
-        }
-      } catch (error) {
-        addDebug(`⚠️ Error cargando Firebase: ${error.message}`);
-      }
+      // 3. Calcular estadísticas
+      const statsData = {
+        total: allEmployees.length,
+        online: allEmployees.filter(emp => emp.isOnline).length,
+        offline: allEmployees.filter(emp => !emp.isOnline).length,
+        withLocation: allEmployees.filter(emp => emp.location).length,
+        realLocations: allEmployees.filter(emp => emp.location?.isReal).length,
+        simulatedLocations: allEmployees.filter(emp => emp.location && !emp.location?.isReal).length
+      };
 
-      // 3. Procesar resultados finales
-      addDebug(`📊 RESUMEN: ${allUsers.length} usuarios totales encontrados`);
-      addDebug(`🔧 Backend: ${allUsers.filter(u => u.source === 'backend').length}`);
-      addDebug(`🔥 Firebase: ${allUsers.filter(u => u.source === 'firebase').length}`);
-
-      setRealUsers(allUsers);
-      window.realUsers = allUsers; // Para debugging
-      setOnlineCount(allUsers.filter(u => u.isOnline).length);
+      setStats(statsData);
+      setEmployees(allEmployees);
       setLastUpdate(new Date());
-      setIsLoading(false);
+
+      addDebug(`📊 Estadísticas: ${statsData.total} total, ${statsData.online} online, ${statsData.realLocations} ubicaciones reales`);
       
-      // Crear marcadores si el mapa está listo
-      if (mapReady && mapInstance.current) {
-        createMarkers(allUsers);
-      }
-      
+      return allEmployees;
+
     } catch (error) {
-      addDebug(`❌ Error cargando usuarios: ${error.message}`);
-      setIsLoading(false);
+      addDebug(`❌ Error cargando empleados: ${error.message}`);
+      return [];
     }
   };
 
-  // Crear marcadores en el mapa
-  const createMarkers = (users) => {
-    if (!mapInstance.current || !window.L) {
-      addDebug('⏳ Mapa no listo para marcadores');
+  // Configurar listener en tiempo real
+  const setupRealTimeListener = () => {
+    try {
+      addDebug('🔄 Configurando listener de ubicaciones en tiempo real...');
+
+      if (!window.LocationTrackingService) {
+        addDebug('❌ LocationTrackingService no disponible para listener');
+        return;
+      }
+
+      // Configurar listener que se ejecuta cuando hay cambios
+      locationListener.current = window.LocationTrackingService.listenToEmployeeLocations(
+        (locations, error) => {
+          if (error) {
+            addDebug(`❌ Error en listener: ${error.message}`);
+            return;
+          }
+
+          addDebug(`🔄 Actualización en tiempo real: ${locations?.length || 0} ubicaciones`);
+          
+          // Recargar empleados cuando hay cambios
+          loadEmployeesWithRealLocations().then(updatedEmployees => {
+            if (mapReady && updatedEmployees.length > 0) {
+              updateMapMarkers(updatedEmployees);
+            }
+          });
+        }
+      );
+
+      addDebug('✅ Listener de tiempo real configurado');
+
+    } catch (error) {
+      addDebug(`❌ Error configurando listener: ${error.message}`);
+    }
+  };
+
+  // Inicializar mapa
+  const initMap = async () => {
+    try {
+      addDebug('🗺️ Iniciando inicialización del mapa...');
+      
+      if (!mapRef.current) {
+        throw new Error('Contenedor del mapa no disponible');
+      }
+
+      // Cargar Leaflet si no está disponible
+      if (!window.L) {
+        addDebug('📦 Cargando Leaflet...');
+        await loadLeafletLibrary();
+      }
+      
+      addDebug('🗺️ Creando mapa...');
+      
+      // Crear mapa centrado en Buenos Aires
+      const map = window.L.map(mapRef.current).setView([-34.6118, -58.3960], 12);
+      
+      // Agregar tiles de OpenStreetMap
+      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+      
+      mapInstance.current = map;
+      setMapReady(true);
+      addDebug('✅ Mapa creado exitosamente');
+      
+      // Cargar empleados y configurar listener
+      const employeesData = await loadEmployeesWithRealLocations();
+      setupRealTimeListener();
+      
+      if (employeesData.length > 0) {
+        updateMapMarkers(employeesData);
+      }
+      
+      setLoading(false);
+      
+    } catch (error) {
+      addDebug(`❌ Error inicializando mapa: ${error.message}`);
+      setTimeout(() => {
+        addDebug('🔄 Reintentando inicialización...');
+        initMap();
+      }, 3000);
+    }
+  };
+
+  // Cargar Leaflet dinámicamente
+  const loadLeafletLibrary = () => {
+    return new Promise((resolve, reject) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  };
+
+  // Actualizar marcadores en el mapa
+  const updateMapMarkers = (employeesList) => {
+    if (!mapInstance.current || !window.L || !employeesList.length) {
+      addDebug('⚠️ No se pueden actualizar marcadores');
       return;
     }
 
-    addDebug(`📍 Creando ${users.length} marcadores...`);
+    addDebug(`📍 Actualizando ${employeesList.length} marcadores...`);
 
-    // Limpiar marcadores anteriores
+    // Limpiar marcadores existentes
     Object.values(markersRef.current).forEach(marker => {
       mapInstance.current.removeLayer(marker);
     });
     markersRef.current = {};
 
-    // Crear marcadores
-    users.forEach(user => {
-      const style = getRoleStyle(user.role, user.isOnline);
+    // Crear marcadores para empleados con ubicación
+    const employeesWithLocation = employeesList.filter(emp => emp.location);
+    
+    employeesWithLocation.forEach(employee => {
+      const color = getColorByRole(employee.role);
+      const icon = getIconByRole(employee.role);
+      const isReal = employee.location.isReal;
       
-      // Crear marcador con DivIcon personalizado
+      // Icono con indicador de tipo de ubicación
       const customIcon = window.L.divIcon({
         html: `
-          <div style="
-            background-color: ${style.color};
-            color: white;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            font-weight: bold;
-            border: 3px solid white;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            opacity: ${style.opacity};
-          ">
-            ${style.icon}
-          </div>
-          <div style="
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            background-color: ${user.source === 'backend' ? '#3B82F6' : '#10B981'};
-            color: white;
-            border-radius: 50%;
-            width: 16px;
-            height: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            border: 2px solid white;
-          ">
-            ${user.source === 'backend' ? 'B' : 'F'}
+          <div style="position: relative;">
+            <div style="
+              background-color: ${color}; 
+              color: white; 
+              border-radius: 50%; 
+              width: 40px; 
+              height: 40px; 
+              display: flex; 
+              align-items: center; 
+              justify-content: center; 
+              font-size: 18px; 
+              border: 3px solid white; 
+              box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+              opacity: ${employee.isOnline ? 1 : 0.6};
+            ">
+              ${icon}
+            </div>
+            <!-- Indicador de ubicación real/simulada -->
+            <div style="
+              position: absolute;
+              top: -2px;
+              right: -2px;
+              background-color: ${isReal ? '#10B981' : '#F59E0B'};
+              color: white;
+              border-radius: 50%;
+              width: 14px;
+              height: 14px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 8px;
+              border: 2px solid white;
+              font-weight: bold;
+            ">
+              ${isReal ? '📍' : '🎯'}
+            </div>
+            <!-- Indicador de fuente -->
+            <div style="
+              position: absolute;
+              bottom: -2px;
+              left: -2px;
+              background-color: ${employee.source === 'tracking' ? '#3B82F6' : '#8B5CF6'};
+              color: white;
+              border-radius: 50%;
+              width: 12px;
+              height: 12px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 8px;
+              border: 1px solid white;
+              font-weight: bold;
+            ">
+              ${employee.source === 'tracking' ? 'T' : 'B'}
+            </div>
           </div>
         `,
         className: 'custom-marker',
@@ -326,36 +317,46 @@ const AgentTrackingPanel = ({ adminId }) => {
         iconAnchor: [20, 20]
       });
 
-      // Crear marcador
-      const marker = window.L.marker([user.location.lat, user.location.lng], {
+      const marker = window.L.marker([employee.location.lat, employee.location.lng], {
         icon: customIcon
-      });
+      }).addTo(mapInstance.current);
 
       // Popup informativo
+      const timeSinceLastSeen = employee.lastSeen ? 
+        Math.round((new Date() - employee.lastSeen) / 1000 / 60) : 0;
+
       const popupContent = `
-        <div style="padding: 10px; min-width: 200px;">
+        <div style="padding: 10px; min-width: 250px;">
           <div style="display: flex; align-items: center; margin-bottom: 10px;">
-            <span style="font-size: 24px; margin-right: 8px;">${style.icon}</span>
+            <span style="font-size: 24px; margin-right: 8px;">${icon}</span>
             <div>
-              <h3 style="margin: 0; font-size: 16px; font-weight: bold;">${user.name}</h3>
-              <p style="margin: 0; color: ${style.color}; font-size: 14px;">${style.name}</p>
+              <h3 style="margin: 0; font-size: 16px; font-weight: bold;">${employee.name}</h3>
+              <p style="margin: 0; color: ${color}; font-size: 14px;">${getRoleLabel(employee.role)}</p>
             </div>
           </div>
-          <div style="font-size: 14px; line-height: 1.4;">
-            <p style="margin: 4px 0;"><strong>📧 Email:</strong> ${user.email}</p>
-            <p style="margin: 4px 0;"><strong>🏗️ Obra:</strong> ${user.obra}</p>
+          
+          <div style="font-size: 13px; line-height: 1.4;">
+            <p style="margin: 4px 0;"><strong>📧 Email:</strong> ${employee.email}</p>
+            <p style="margin: 4px 0;"><strong>🏗️ Obra:</strong> ${employee.obra || 'Sin asignar'}</p>
             <p style="margin: 4px 0;"><strong>📊 Estado:</strong> 
-              <span style="color: ${user.isOnline ? '#10B981' : '#EF4444'};">
-                ${user.isOnline ? '🟢 En línea' : '🔴 Desconectado'}
+              <span style="color: ${employee.isOnline ? '#10B981' : '#EF4444'};">
+                ${employee.isOnline ? '🟢 En línea' : '🔴 Desconectado'}
               </span>
             </p>
-            <p style="margin: 4px 0;"><strong>🕐 Última vez:</strong> ${user.lastSeen.toLocaleTimeString()}</p>
+            <p style="margin: 4px 0;"><strong>🕐 Última vez:</strong> 
+              ${timeSinceLastSeen < 60 ? `${timeSinceLastSeen}min` : `${Math.round(timeSinceLastSeen/60)}h`} atrás
+            </p>
+            <p style="margin: 4px 0;"><strong>📍 Ubicación:</strong> 
+              <span style="padding: 2px 6px; border-radius: 12px; background-color: ${isReal ? '#10B981' : '#F59E0B'}; color: white; font-size: 11px;">
+                ${isReal ? '🎯 GPS Real' : '📍 Simulada'}
+              </span>
+              ${employee.location.accuracy ? `(±${Math.round(employee.location.accuracy)}m)` : ''}
+            </p>
             <p style="margin: 4px 0;"><strong>💾 Fuente:</strong> 
-              <span style="padding: 2px 6px; border-radius: 12px; background-color: ${user.source === 'backend' ? '#3B82F6' : '#10B981'}; color: white; font-size: 12px;">
-                ${user.source === 'backend' ? '🔧 Backend' : '🔥 Firebase'}
+              <span style="padding: 2px 6px; border-radius: 12px; background-color: ${employee.source === 'tracking' ? '#3B82F6' : '#8B5CF6'}; color: white; font-size: 11px;">
+                ${employee.source === 'tracking' ? '📡 Tracking' : '🔧 Backend'}
               </span>
             </p>
-            <p style="margin: 4px 0;"><strong>📍 ID:</strong> ${user.id}</p>
           </div>
         </div>
       `;
@@ -365,17 +366,14 @@ const AgentTrackingPanel = ({ adminId }) => {
         className: 'custom-popup'
       });
 
-      // Agregar al mapa y guardar referencia
-      marker.addTo(mapInstance.current);
-      markersRef.current[user.id] = marker;
+      markersRef.current[employee.id] = marker;
     });
 
-    // Ajustar vista para mostrar todos los marcadores
-    if (users.length > 0) {
+    // Ajustar vista si hay marcadores
+    if (employeesWithLocation.length > 0) {
       const group = new window.L.featureGroup(Object.values(markersRef.current));
       mapInstance.current.fitBounds(group.getBounds().pad(0.1));
       
-      // Zoom mínimo
       setTimeout(() => {
         if (mapInstance.current.getZoom() > 15) {
           mapInstance.current.setZoom(15);
@@ -383,91 +381,93 @@ const AgentTrackingPanel = ({ adminId }) => {
       }, 500);
     }
 
-    addDebug(`✅ ${users.length} marcadores creados exitosamente`);
+    addDebug(`✅ ${employeesWithLocation.length} marcadores actualizados`);
   };
 
-  // Effect para inicializar
+  // Utilidades
+  const getColorByRole = (role) => {
+    const colors = {
+      admin: '#8B5CF6',
+      administrador: '#8B5CF6',
+      jefe_obra: '#F59E0B',
+      empleado: '#10B981',
+      albañil: '#10B981',
+      albanil: '#10B981',
+      logistica: '#EF4444'
+    };
+    return colors[role] || '#6B7280';
+  };
+
+  const getIconByRole = (role) => {
+    const icons = {
+      admin: '👑',
+      administrador: '👑',
+      jefe_obra: '👨‍💼',
+      empleado: '👷',
+      albañil: '👷',
+      albanil: '👷',
+      logistica: '🚚'
+    };
+    return icons[role] || '👤';
+  };
+
+  const getRoleLabel = (role) => {
+    const labels = {
+      admin: 'Administrador',
+      administrador: 'Administrador',
+      jefe_obra: 'Jefe de Obra',
+      empleado: 'Empleado',
+      albañil: 'Albañil',
+      albanil: 'Albañil',
+      logistica: 'Logística'
+    };
+    return labels[role] || role;
+  };
+
+  // Inicialización
   useEffect(() => {
     addDebug('🚀 AgentTrackingPanel montado');
     
-    // Delay inicial más largo
-    const timer = setTimeout(() => {
-      addDebug('⏰ Iniciando proceso de inicialización...');
-      initializeMap();
-    }, 2000); // 2 segundos de delay
+    setTimeout(() => {
+      initMap();
+    }, 1000);
 
     return () => {
-      clearTimeout(timer);
-      addDebug('🧹 AgentTrackingPanel desmontado');
+      addDebug('🧹 Limpiando listener...');
+      if (locationListener.current) {
+        locationListener.current();
+      }
     };
   }, []);
 
-  // Effect para crear marcadores cuando todo esté listo
+  // Actualización periódica adicional
   useEffect(() => {
-    if (mapReady && realUsers.length > 0) {
-      addDebug('🎯 Mapa y usuarios listos, creando marcadores...');
-      createMarkers(realUsers);
-    }
-  }, [mapReady, realUsers]);
-
-  // Actualización periódica
-  useEffect(() => {
-    if (!isLoading && mapReady) {
+    if (!loading && mapReady) {
       const interval = setInterval(() => {
-        addDebug('🔄 Actualizando usuarios automáticamente...');
-        loadUsersFromAllSources();
-      }, 30000); // Cada 30 segundos
+        addDebug('🔄 Actualización periódica...');
+        loadEmployeesWithRealLocations().then(updatedEmployees => {
+          if (updatedEmployees.length > 0) {
+            updateMapMarkers(updatedEmployees);
+          }
+        });
+      }, 60000); // Cada minuto
 
       return () => clearInterval(interval);
     }
-  }, [isLoading, mapReady]);
+  }, [loading, mapReady]);
 
-  // Loading/Error screens
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-50">
-        <div className="text-center max-w-md">
-          <div className="text-6xl mb-4">🗺️</div>
-          <div className="text-xl font-semibold text-gray-700 mb-2">Control de Agentes</div>
-          <div className="text-gray-500 mb-4">{loadingMessage}</div>
-          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin mb-4"></div>
-          
-          {/* Debug info */}
-          <div className="bg-gray-100 rounded-lg p-3 text-left text-xs">
-            <h4 className="font-semibold mb-2">Debug Info:</h4>
-            {debugInfo.map((info, index) => (
-              <div key={index} className="text-gray-600 mb-1">{info}</div>
-            ))}
-          </div>
-          
-          <button 
-            onClick={() => {
-              retryCount.current = 0;
-              setDebugInfo([]);
-              addDebug('🔄 Reinicio manual');
-              initializeMap();
-            }}
-            className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-600"
-          >
-            🔄 Reintentar
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Main render
+  // Render
   return (
-    <div className="h-full flex flex-col bg-white">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4">
+    <div className="w-full h-full relative" style={{ minHeight: '600px' }}>
+      {/* HEADER MEJORADO */}
+      <div className="absolute top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <span className="text-2xl">🗺️</span>
             <div>
               <h1 className="text-xl font-bold">Control de Agentes en Tiempo Real</h1>
               <p className="text-blue-100 text-sm">
-                {realUsers.length} agentes • {onlineCount} en línea • {lastUpdate.toLocaleTimeString()}
+                {stats.total} agentes • {stats.online} en línea • {stats.realLocations} ubicaciones reales
               </p>
             </div>
           </div>
@@ -478,8 +478,15 @@ const AgentTrackingPanel = ({ adminId }) => {
               EN VIVO
             </div>
             <button 
-              onClick={loadUsersFromAllSources}
-              className="bg-white text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
+              onClick={() => {
+                addDebug('🔄 Actualización manual');
+                loadEmployeesWithRealLocations().then(employees => {
+                  if (employees.length > 0) {
+                    updateMapMarkers(employees);
+                  }
+                });
+              }}
+              className="bg-white text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50"
             >
               🔄 Actualizar
             </button>
@@ -487,60 +494,87 @@ const AgentTrackingPanel = ({ adminId }) => {
         </div>
       </div>
 
-      {/* Mapa */}
-      <div className="flex-1 relative">
-        {/* CONTENEDOR DEL MAPA - SIEMPRE VISIBLE */}
-        <div 
-          ref={mapRef}
-          className="w-full h-full"
-          style={{ 
-            minHeight: '600px',
-            backgroundColor: '#f0f0f0',
-            border: '2px solid #e0e0e0' // Para debug visual
-          }}
-        />
-        
-        {/* Stats panel MEJORADO */}
-        <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 max-w-xs z-10">
-          <h3 className="font-semibold text-gray-800 mb-2">Estado del Sistema</h3>
-          <div className="space-y-1 text-sm">
-            <p>📍 Contenedor: {mapRef.current ? '✅ OK' : '❌ NULL'}</p>
-            <p>🗺️ Mapa: {mapReady ? '✅ Listo' : '⏳ Cargando'}</p>
-            <p>🍃 Leaflet: {window.L ? '✅ OK' : '❌ No'}</p>
-            <p>📊 Firebase: {window.db ? '✅ OK' : '❌ No'}</p>
-            <p>🔧 Backend: {localStorage.getItem('token') ? '✅ OK' : '❌ No token'}</p>
-            <p>👥 Total usuarios: {realUsers.length}</p>
-            <p>📍 Marcadores: {Object.keys(markersRef.current).length}</p>
-            <p>🔧 Backend: {realUsers.filter(u => u.source === 'backend').length}</p>
-            <p>🔥 Firebase: {realUsers.filter(u => u.source === 'firebase').length}</p>
-          </div>
-          
-          {/* Debug reciente */}
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <h4 className="font-medium text-gray-700 mb-1 text-xs">Debug reciente:</h4>
-            <div className="text-xs space-y-1 max-h-20 overflow-y-auto">
-              {debugInfo.slice(-3).map((info, index) => (
-                <div key={index} className="text-gray-600">{info}</div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Leyenda de fuentes */}
-        <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-3 z-10">
-          <h4 className="font-medium text-gray-800 mb-2 text-sm">Fuentes de Datos</h4>
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center">
-              <div className="w-4 h-4 bg-blue-500 rounded-full mr-2 flex items-center justify-center text-white text-xs font-bold">B</div>
-              <span>Backend/AdminPanel</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-4 h-4 bg-green-500 rounded-full mr-2 flex items-center justify-center text-white text-xs font-bold">F</div>
-              <span>Firebase Real-time</span>
-            </div>
+      {/* ESTADÍSTICAS DETALLADAS */}
+      <div className="absolute top-20 right-4 z-50 bg-white rounded-lg shadow-lg p-3">
+        <h4 className="font-medium text-gray-800 mb-2 text-sm">Estadísticas</h4>
+        <div className="space-y-1 text-xs">
+          <div>👥 Total: {stats.total}</div>
+          <div>🟢 Online: {stats.online}</div>
+          <div>🔴 Offline: {stats.offline}</div>
+          <div>📍 Con ubicación: {stats.withLocation}</div>
+          <div>🎯 GPS Real: {stats.realLocations}</div>
+          <div>📍 Simulada: {stats.simulatedLocations}</div>
+          <div className="pt-1 border-t">
+            <div>🕐 {lastUpdate.toLocaleTimeString()}</div>
           </div>
         </div>
       </div>
+
+      {/* DEBUG PANEL */}
+      <div className="absolute top-20 left-4 z-50 bg-white rounded-lg shadow-lg p-4 max-w-xs">
+        <h3 className="font-semibold text-gray-800 mb-2">Estado del Sistema</h3>
+        <div className="space-y-1 text-sm">
+          <p>📍 Contenedor: {mapRef.current ? '✅ OK' : '❌ NULL'}</p>
+          <p>🗺️ Mapa: {mapReady ? '✅ Listo' : '⏳ Cargando'}</p>
+          <p>🍃 Leaflet: {window.L ? '✅ OK' : '❌ No'}</p>
+          <p>📡 LocationService: {window.LocationTrackingService ? '✅ OK' : '❌ No'}</p>
+          <p>🔄 Listener: {locationListener.current ? '✅ Activo' : '❌ Inactivo'}</p>
+          <p>📍 Marcadores: {Object.keys(markersRef.current).length}</p>
+        </div>
+        
+        <div className="mt-3 pt-3 border-t border-gray-200">
+          <h4 className="font-medium text-gray-700 mb-1 text-xs">Debug Log:</h4>
+          <div className="text-xs space-y-1 max-h-32 overflow-y-auto">
+            {debugInfo.slice(-4).map((info, index) => (
+              <div key={index} className="text-gray-600">{info}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* LEYENDA */}
+      <div className="absolute bottom-4 right-4 z-50 bg-white rounded-lg shadow-lg p-3">
+        <h4 className="font-medium text-gray-800 mb-2 text-sm">Leyenda</h4>
+        <div className="space-y-2 text-xs">
+          <div className="flex items-center">
+            <span className="mr-2">🎯</span>
+            <span>GPS Real</span>
+          </div>
+          <div className="flex items-center">
+            <span className="mr-2">📍</span>
+            <span>Simulada</span>
+          </div>
+          <div className="flex items-center">
+            <span className="mr-2 text-blue-600 font-bold">T</span>
+            <span>Tracking System</span>
+          </div>
+          <div className="flex items-center">
+            <span className="mr-2 text-purple-600 font-bold">B</span>
+            <span>Backend/Admin</span>
+          </div>
+        </div>
+      </div>
+
+      {/* LOADING OVERLAY */}
+      {loading && (
+        <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-40">
+          <div className="text-center">
+            <div className="text-4xl mb-2">🗺️</div>
+            <div className="text-lg font-semibold mb-2">Cargando Sistema de Tracking</div>
+            <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          </div>
+        </div>
+      )}
+
+      {/* CONTENEDOR DEL MAPA */}
+      <div
+        ref={mapRef}
+        className="w-full h-full bg-gray-200"
+        style={{ 
+          minHeight: '600px',
+          marginTop: '80px' // Espacio para el header
+        }}
+      />
     </div>
   );
 };

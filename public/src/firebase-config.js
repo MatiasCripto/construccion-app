@@ -1,4 +1,4 @@
-// firebase-config.js - CONFIGURACIÓN FINAL: construccion-pro-3edcb
+// firebase-config.js - ARREGLADO: Sin storage problemático
 const firebaseConfig = {
   apiKey: "AIzaSyAuyZnuh4eGuDyoKJRQn1V2ZUQQksSipw0",
   authDomain: "construccion-pro-3edcb.firebaseapp.com",
@@ -12,16 +12,14 @@ const firebaseConfig = {
 // Inicializar Firebase
 firebase.initializeApp(firebaseConfig);
 
-// Inicializar servicios
+// Inicializar servicios (SIN STORAGE POR AHORA)
 const db = firebase.firestore();
-const storage = firebase.storage();
 
 // Hacer disponible globalmente
 window.db = db;
-window.storage = storage;
 window.firebase = firebase;
 
-// Configurar configuraciones regionales si es necesario
+// Configurar configuraciones regionales
 db.settings({
   cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED
 });
@@ -31,7 +29,7 @@ const FirebaseService = {
   // ===== GESTIÓN DE USUARIOS =====
   async createUserDocument(userData) {
     try {
-      console.log('🔨 Creando usuario:', userData);
+      console.log('🔨 Creando usuario en Firebase:', userData);
       
       // Validar datos requeridos
       if (!userData.nombre || !userData.email || !userData.rol) {
@@ -46,13 +44,17 @@ const FirebaseService = {
         obra: userData.obra ? String(userData.obra).trim() : null,
         activo: userData.activo !== undefined ? Boolean(userData.activo) : true,
         fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
-        ultimaActividad: firebase.firestore.FieldValue.serverTimestamp()
+        ultimaActividad: firebase.firestore.FieldValue.serverTimestamp(),
+        backendId: userData.backendId || null,
+        username: userData.username || null,
+        apellido: userData.apellido || null
       };
 
       // Validar rol
-      const rolesValidos = ['administrador', 'logistica', 'jefe_obra', 'albañil'];
+      const rolesValidos = ['administrador', 'admin', 'logistica', 'jefe_obra', 'albañil', 'albanil'];
       if (!rolesValidos.includes(cleanData.rol)) {
-        throw new Error(`Rol inválido. Debe ser uno de: ${rolesValidos.join(', ')}`);
+        console.warn(`⚠️ Rol "${cleanData.rol}" no reconocido, usando 'albañil'`);
+        cleanData.rol = 'albañil';
       }
 
       // Generar ID único
@@ -66,10 +68,10 @@ const FirebaseService = {
       // Crear documento en Firestore
       await db.collection('usuarios').doc(userId).set(cleanData);
 
-      console.log('✅ Usuario creado exitosamente con ID:', userId);
+      console.log('✅ Usuario creado exitosamente en Firebase con ID:', userId);
       return { id: userId, ...cleanData };
     } catch (error) {
-      console.error('❌ Error creando usuario:', error);
+      console.error('❌ Error creando usuario en Firebase:', error);
       throw error;
     }
   },
@@ -187,7 +189,7 @@ const FirebaseService = {
     try {
       const cleanData = {
         contenido: String(messageData.contenido || '').trim(),
-        tipo: String(messageData.tipo || 'texto').trim(), // 'texto', 'audio', 'imagen'
+        tipo: String(messageData.tipo || 'texto').trim(),
         autorId: String(messageData.autorId || '').trim(),
         autorNombre: String(messageData.autorNombre || '').trim(),
         obraId: messageData.obraId ? String(messageData.obraId).trim() : null,
@@ -232,7 +234,7 @@ const FirebaseService = {
         longitude: Number(locationData.longitude),
         accuracy: locationData.accuracy || null,
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        fecha: new Date().toISOString().split('T')[0] // YYYY-MM-DD
+        fecha: new Date().toISOString().split('T')[0]
       };
 
       const locationRef = await db.collection('user_locations').add(cleanData);
@@ -264,7 +266,6 @@ const FirebaseService = {
 
   async getLatestUserLocations() {
     try {
-      // Obtener la ubicación más reciente de cada usuario
       const snapshot = await db.collection('user_locations')
         .orderBy('timestamp', 'desc')
         .get();
@@ -280,44 +281,6 @@ const FirebaseService = {
       return Array.from(latestLocations.values());
     } catch (error) {
       console.error('❌ Error obteniendo ubicaciones recientes:', error);
-      throw error;
-    }
-  },
-
-  // ===== GESTIÓN DE ARCHIVOS (STORAGE) =====
-  async uploadFile(file, path) {
-    try {
-      console.log('📁 Subiendo archivo:', file.name, 'a', path);
-      
-      const timestamp = Date.now();
-      const fileName = `${timestamp}_${file.name}`;
-      const fullPath = `${path}/${fileName}`;
-      
-      const storageRef = storage.ref().child(fullPath);
-      const uploadTask = await storageRef.put(file);
-      
-      const downloadURL = await uploadTask.ref.getDownloadURL();
-      
-      console.log('✅ Archivo subido exitosamente:', downloadURL);
-      return {
-        url: downloadURL,
-        path: fullPath,
-        size: file.size,
-        type: file.type
-      };
-    } catch (error) {
-      console.error('❌ Error subiendo archivo:', error);
-      throw error;
-    }
-  },
-
-  async deleteFile(path) {
-    try {
-      const storageRef = storage.ref().child(path);
-      await storageRef.delete();
-      return true;
-    } catch (error) {
-      console.error('❌ Error eliminando archivo:', error);
       throw error;
     }
   },
@@ -367,5 +330,5 @@ window.FirebaseService = FirebaseService;
 console.log('🔥 Firebase inicializado correctamente');
 console.log('📊 Proyecto:', firebaseConfig.projectId);
 console.log('🗃️ Firestore habilitado');
-console.log('📁 Storage habilitado');
-console.log('✅ Todas las funciones disponibles');
+console.log('📁 Storage temporalmente deshabilitado');
+console.log('✅ FirebaseService disponible');
