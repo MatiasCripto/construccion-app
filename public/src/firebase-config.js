@@ -1,19 +1,21 @@
-// firebase-config.js - ARREGLADO
+// firebase-config.js - PROYECTO: construccion-pro
 const firebaseConfig = {
-  apiKey: "AIzaSyDMIBS-LzegVdML_x37iPlA8gOqrs7Vkxk",
-  authDomain: "construccion-pro-app.firebaseapp.com",
-  projectId: "construccion-pro-app",
-  storageBucket: "construccion-pro-app.firebasestorage.app",
-  messagingSenderId: "1024585462542",
-  appId: "1:1024585462542:web:f5f4e3a8d6c9b2a1"
+  apiKey: "AIzaSyC5CzhdmQ803qrXvXItmK-J6EwuKlTKVuo",
+  authDomain: "construccion-pro.firebaseapp.com",
+  projectId: "construccion-pro",
+  storageBucket: "construccion-pro.firebasestorage.app",
+  messagingSenderId: "724069842619",
+  appId: "1:724069842619:web:9a472ca315f3ae7682339e",
+  measurementId: "G-2Y6TG2PCQJ"
 };
 
 // Inicializar Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
+const storage = firebase.storage();
 
-// SERVICIO FIREBASE ARREGLADO
+// SERVICIO FIREBASE COMPLETO
 const FirebaseService = {
   // CREAR USUARIO DOCUMENT - ARREGLADO
   async createUserDocument(userData) {
@@ -313,6 +315,24 @@ const FirebaseService = {
       console.error('❌ Error obteniendo ubicación:', error);
       return null;
     }
+  },
+
+  // SUBIR ARCHIVO A STORAGE
+  async uploadFile(file, path) {
+    try {
+      console.log('📤 Subiendo archivo:', file.name, 'a', path);
+      
+      const storageRef = storage.ref().child(path);
+      const uploadTask = await storageRef.put(file);
+      const downloadURL = await uploadTask.ref.getDownloadURL();
+      
+      console.log('✅ Archivo subido:', downloadURL);
+      return { success: true, url: downloadURL };
+      
+    } catch (error) {
+      console.error('❌ Error subiendo archivo:', error);
+      throw error;
+    }
   }
 };
 
@@ -320,6 +340,7 @@ const FirebaseService = {
 window.FirebaseService = FirebaseService;
 window.db = db;
 window.auth = auth;
+window.storage = storage;
 window.firebase = firebase;
 
-console.log('✅ Firebase configurado correctamente con servicios arreglados');
+console.log('✅ Firebase configurado correctamente para proyecto: construccion-pro');
