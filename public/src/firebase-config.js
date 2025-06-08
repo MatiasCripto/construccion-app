@@ -1,165 +1,180 @@
-// firebase-config.js - PROYECTO: construccion-pro
+// firebase-config.js - CONFIGURACIÓN FINAL: construccion-pro-3edcb
 const firebaseConfig = {
-  apiKey: "AIzaSyC5CzhdmQ803qrXvXItmK-J6EwuKlTKVuo",
-  authDomain: "construccion-pro.firebaseapp.com",
-  projectId: "construccion-pro",
-  storageBucket: "construccion-pro.firebasestorage.app",
-  messagingSenderId: "724069842619",
-  appId: "1:724069842619:web:9a472ca315f3ae7682339e",
-  measurementId: "G-2Y6TG2PCQJ"
+  apiKey: "AIzaSyAuyZnuh4eGuDyoKJRQn1V2ZUQQksSipw0",
+  authDomain: "construccion-pro-3edcb.firebaseapp.com",
+  projectId: "construccion-pro-3edcb",
+  storageBucket: "construccion-pro-3edcb.firebasestorage.app",
+  messagingSenderId: "819477405278",
+  appId: "1:819477405278:web:9cc8142f69455e76ca1ecf",
+  measurementId: "G-6YBG0HTGVV"
 };
 
 // Inicializar Firebase
 firebase.initializeApp(firebaseConfig);
+
+// Inicializar servicios
 const db = firebase.firestore();
-const auth = firebase.auth();
 const storage = firebase.storage();
 
-// SERVICIO FIREBASE COMPLETO
+// Hacer disponible globalmente
+window.db = db;
+window.storage = storage;
+window.firebase = firebase;
+
+// Configurar configuraciones regionales si es necesario
+db.settings({
+  cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED
+});
+
+// Servicio Firebase para operaciones comunes
 const FirebaseService = {
-  // CREAR USUARIO DOCUMENT - ARREGLADO
+  // ===== GESTIÓN DE USUARIOS =====
   async createUserDocument(userData) {
     try {
-      console.log('🔥 Creando usuario en Firebase:', userData);
+      console.log('🔨 Creando usuario:', userData);
       
-      // VALIDAR Y LIMPIAR DATOS
-      const cleanUserData = {
+      // Validar datos requeridos
+      if (!userData.nombre || !userData.email || !userData.rol) {
+        throw new Error('Faltan datos requeridos: nombre, email, rol');
+      }
+
+      // Limpiar y validar datos
+      const cleanData = {
         nombre: String(userData.nombre || '').trim(),
         email: String(userData.email || '').trim().toLowerCase(),
-        rol: String(userData.rol || 'albañil').trim(),
-        obra: String(userData.obra || '').trim(),
+        rol: String(userData.rol || '').trim().toLowerCase(),
+        obra: userData.obra ? String(userData.obra).trim() : null,
+        activo: userData.activo !== undefined ? Boolean(userData.activo) : true,
         fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
-        activo: true,
         ultimaActividad: firebase.firestore.FieldValue.serverTimestamp()
       };
 
-      // GENERAR ID ÚNICO VÁLIDO
-      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      console.log('📝 Datos limpiados:', cleanUserData);
+      // Validar rol
+      const rolesValidos = ['administrador', 'logistica', 'jefe_obra', 'albañil'];
+      if (!rolesValidos.includes(cleanData.rol)) {
+        throw new Error(`Rol inválido. Debe ser uno de: ${rolesValidos.join(', ')}`);
+      }
+
+      // Generar ID único
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(2, 15);
+      const userId = `user_${timestamp}_${randomString}`;
+
+      console.log('📝 Datos limpios:', cleanData);
       console.log('🆔 ID generado:', userId);
 
-      // CREAR DOCUMENTO EN FIRESTORE
-      const docRef = db.collection('usuarios').doc(userId);
-      await docRef.set(cleanUserData);
-      
+      // Crear documento en Firestore
+      await db.collection('usuarios').doc(userId).set(cleanData);
+
       console.log('✅ Usuario creado exitosamente con ID:', userId);
-      
-      return {
-        success: true,
-        userId: userId,
-        data: cleanUserData
-      };
-      
+      return { id: userId, ...cleanData };
     } catch (error) {
       console.error('❌ Error creando usuario:', error);
       throw error;
     }
   },
 
-  // OBTENER TODOS LOS USUARIOS
+  async getUserById(userId) {
+    try {
+      const doc = await db.collection('usuarios').doc(userId).get();
+      if (doc.exists) {
+        return { id: doc.id, ...doc.data() };
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Error obteniendo usuario:', error);
+      throw error;
+    }
+  },
+
   async getAllUsers() {
     try {
-      console.log('📥 Obteniendo todos los usuarios...');
-      
       const snapshot = await db.collection('usuarios').get();
       const users = [];
-      
       snapshot.forEach(doc => {
-        users.push({
-          id: doc.id,
-          ...doc.data()
-        });
+        users.push({ id: doc.id, ...doc.data() });
       });
-      
-      console.log(`✅ ${users.length} usuarios obtenidos`);
       return users;
-      
     } catch (error) {
       console.error('❌ Error obteniendo usuarios:', error);
       throw error;
     }
   },
 
-  // ACTUALIZAR USUARIO
-  async updateUser(userId, updateData) {
+  async getUsersByRole(rol) {
     try {
-      console.log('📝 Actualizando usuario:', userId, updateData);
-      
-      // LIMPIAR DATOS DE ACTUALIZACIÓN
-      const cleanUpdateData = {};
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] !== undefined && updateData[key] !== null) {
-          cleanUpdateData[key] = String(updateData[key]).trim();
-        }
+      const snapshot = await db.collection('usuarios')
+        .where('rol', '==', rol.toLowerCase())
+        .get();
+      const users = [];
+      snapshot.forEach(doc => {
+        users.push({ id: doc.id, ...doc.data() });
       });
-      
-      cleanUpdateData.ultimaActividad = firebase.firestore.FieldValue.serverTimestamp();
-      
-      await db.collection('usuarios').doc(String(userId)).update(cleanUpdateData);
-      
-      console.log('✅ Usuario actualizado:', userId);
-      return { success: true };
-      
+      return users;
+    } catch (error) {
+      console.error('❌ Error obteniendo usuarios por rol:', error);
+      throw error;
+    }
+  },
+
+  async updateUser(userId, updates) {
+    try {
+      const cleanUpdates = {
+        ...updates,
+        ultimaActividad: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      await db.collection('usuarios').doc(userId).update(cleanUpdates);
+      return { id: userId, ...cleanUpdates };
     } catch (error) {
       console.error('❌ Error actualizando usuario:', error);
       throw error;
     }
   },
 
-  // ELIMINAR USUARIO
   async deleteUser(userId) {
     try {
-      console.log('🗑️ Eliminando usuario:', userId);
-      
-      await db.collection('usuarios').doc(String(userId)).delete();
-      
-      console.log('✅ Usuario eliminado:', userId);
-      return { success: true };
-      
+      await db.collection('usuarios').doc(userId).delete();
+      return true;
     } catch (error) {
       console.error('❌ Error eliminando usuario:', error);
       throw error;
     }
   },
 
-  // CREAR OBRA
+  // ===== GESTIÓN DE OBRAS =====
   async createObra(obraData) {
     try {
-      console.log('🏗️ Creando obra:', obraData);
-      
-      const cleanObraData = {
+      const cleanData = {
         nombre: String(obraData.nombre || '').trim(),
         descripcion: String(obraData.descripcion || '').trim(),
-        ubicacion: String(obraData.ubicacion || '').trim(),
+        ubicacion: obraData.ubicacion || null,
         fechaInicio: obraData.fechaInicio || null,
-        fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
-        activa: true
+        fechaEstimadaFin: obraData.fechaEstimadaFin || null,
+        estado: String(obraData.estado || 'planificacion').trim().toLowerCase(),
+        presupuesto: obraData.presupuesto || null,
+        responsable: obraData.responsable || null,
+        fechaCreacion: firebase.firestore.FieldValue.serverTimestamp()
       };
 
-      const obraId = `obra_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      await db.collection('obras').doc(obraId).set(cleanObraData);
-      
-      console.log('✅ Obra creada:', obraId);
-      return { success: true, obraId: obraId };
-      
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(2, 15);
+      const obraId = `obra_${timestamp}_${randomString}`;
+
+      await db.collection('obras').doc(obraId).set(cleanData);
+      return { id: obraId, ...cleanData };
     } catch (error) {
       console.error('❌ Error creando obra:', error);
       throw error;
     }
   },
 
-  // OBTENER OBRAS
-  async getObras() {
+  async getAllObras() {
     try {
       const snapshot = await db.collection('obras').get();
       const obras = [];
-      
       snapshot.forEach(doc => {
         obras.push({ id: doc.id, ...doc.data() });
       });
-      
       return obras;
     } catch (error) {
       console.error('❌ Error obteniendo obras:', error);
@@ -167,180 +182,190 @@ const FirebaseService = {
     }
   },
 
-  // AGREGAR MENSAJE AL CHAT
-  async addMensaje(obraId, mensajeData) {
+  // ===== GESTIÓN DE MENSAJES/CHAT =====
+  async createMessage(messageData) {
     try {
-      console.log('💬 Agregando mensaje:', { obraId, mensajeData });
-      
-      const cleanMensajeData = {
-        userId: String(mensajeData.userId || '').trim(),
-        userName: String(mensajeData.userName || '').trim(),
-        userRole: String(mensajeData.userRole || '').trim(),
-        mensaje: String(mensajeData.mensaje || '').trim(),
-        tipo: String(mensajeData.tipo || 'texto').trim(),
+      const cleanData = {
+        contenido: String(messageData.contenido || '').trim(),
+        tipo: String(messageData.tipo || 'texto').trim(), // 'texto', 'audio', 'imagen'
+        autorId: String(messageData.autorId || '').trim(),
+        autorNombre: String(messageData.autorNombre || '').trim(),
+        obraId: messageData.obraId ? String(messageData.obraId).trim() : null,
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        obraId: String(obraId).trim()
+        leido: false,
+        archivoUrl: messageData.archivoUrl || null
       };
 
-      // Agregar campos específicos según el tipo
-      if (mensajeData.audioUrl) {
-        cleanMensajeData.audioUrl = String(mensajeData.audioUrl).trim();
-      }
-      if (mensajeData.duration) {
-        cleanMensajeData.duration = Number(mensajeData.duration) || 0;
-      }
-
-      const mensajeId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      await db.collection('mensajes').doc(mensajeId).set(cleanMensajeData);
-      
-      console.log('✅ Mensaje agregado:', mensajeId);
-      return { success: true, mensajeId: mensajeId };
-      
+      const messageRef = await db.collection('mensajes').add(cleanData);
+      return { id: messageRef.id, ...cleanData };
     } catch (error) {
-      console.error('❌ Error agregando mensaje:', error);
+      console.error('❌ Error creando mensaje:', error);
       throw error;
     }
   },
 
-  // OBTENER MENSAJES DE UNA OBRA
-  async getMensajes(obraId) {
+  async getMessagesByObra(obraId) {
     try {
-      console.log('📥 Obteniendo mensajes para obra:', obraId);
-      
       const snapshot = await db.collection('mensajes')
-        .where('obraId', '==', String(obraId))
+        .where('obraId', '==', obraId)
+        .orderBy('timestamp', 'desc')
+        .limit(100)
         .get();
       
-      const mensajes = [];
+      const messages = [];
       snapshot.forEach(doc => {
-        const data = doc.data();
-        mensajes.push({
-          id: doc.id,
-          ...data,
-          timestamp: data.timestamp ? data.timestamp.toDate() : new Date()
-        });
+        messages.push({ id: doc.id, ...doc.data() });
       });
-      
-      // Ordenar por timestamp
-      mensajes.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-      
-      console.log(`✅ ${mensajes.length} mensajes obtenidos`);
-      return mensajes;
-      
+      return messages;
     } catch (error) {
       console.error('❌ Error obteniendo mensajes:', error);
       throw error;
     }
   },
 
-  // LISTENER EN TIEMPO REAL PARA MENSAJES
-  listenToMensajes(obraId, callback) {
-    console.log('👂 Configurando listener para obra:', obraId);
-    
-    return db.collection('mensajes')
-      .where('obraId', '==', String(obraId))
-      .onSnapshot(snapshot => {
-        console.log('📨 Cambios detectados en mensajes');
-        
-        const mensajes = [];
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          mensajes.push({
-            id: doc.id,
-            ...data,
-            timestamp: data.timestamp ? data.timestamp.toDate() : new Date()
-          });
-        });
-        
-        // Ordenar por timestamp
-        mensajes.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-        
-        callback(mensajes);
-      }, error => {
-        console.error('❌ Error en listener de mensajes:', error);
-      });
-  },
-
-  // GUARDAR UBICACIÓN DE USUARIO
+  // ===== GESTIÓN DE UBICACIONES =====
   async saveUserLocation(userId, locationData) {
     try {
-      console.log('📍 Guardando ubicación:', { userId, locationData });
-      
-      const cleanLocationData = {
+      const cleanData = {
         userId: String(userId).trim(),
         latitude: Number(locationData.latitude),
         longitude: Number(locationData.longitude),
-        accuracy: Number(locationData.accuracy || 0),
+        accuracy: locationData.accuracy || null,
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        source: String(locationData.source || 'manual').trim()
+        fecha: new Date().toISOString().split('T')[0] // YYYY-MM-DD
       };
 
-      const locationId = `loc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      await db.collection('user_locations').doc(locationId).set(cleanLocationData);
-      
-      console.log('✅ Ubicación guardada:', locationId);
-      return { success: true, locationId: locationId };
-      
+      const locationRef = await db.collection('user_locations').add(cleanData);
+      return { id: locationRef.id, ...cleanData };
     } catch (error) {
       console.error('❌ Error guardando ubicación:', error);
       throw error;
     }
   },
 
-  // OBTENER ÚLTIMA UBICACIÓN DE USUARIO
-  async getUserLocation(userId) {
+  async getUserLocations(userId, limit = 10) {
     try {
       const snapshot = await db.collection('user_locations')
-        .where('userId', '==', String(userId))
+        .where('userId', '==', userId)
         .orderBy('timestamp', 'desc')
-        .limit(1)
+        .limit(limit)
         .get();
-
-      if (snapshot.empty) {
-        return null;
-      }
-
-      const doc = snapshot.docs[0];
-      const data = doc.data();
       
-      return {
-        id: doc.id,
-        ...data,
-        timestamp: data.timestamp ? data.timestamp.toDate() : null
-      };
-      
+      const locations = [];
+      snapshot.forEach(doc => {
+        locations.push({ id: doc.id, ...doc.data() });
+      });
+      return locations;
     } catch (error) {
-      console.error('❌ Error obteniendo ubicación:', error);
-      return null;
+      console.error('❌ Error obteniendo ubicaciones:', error);
+      throw error;
     }
   },
 
-  // SUBIR ARCHIVO A STORAGE
+  async getLatestUserLocations() {
+    try {
+      // Obtener la ubicación más reciente de cada usuario
+      const snapshot = await db.collection('user_locations')
+        .orderBy('timestamp', 'desc')
+        .get();
+      
+      const latestLocations = new Map();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (!latestLocations.has(data.userId)) {
+          latestLocations.set(data.userId, { id: doc.id, ...data });
+        }
+      });
+      
+      return Array.from(latestLocations.values());
+    } catch (error) {
+      console.error('❌ Error obteniendo ubicaciones recientes:', error);
+      throw error;
+    }
+  },
+
+  // ===== GESTIÓN DE ARCHIVOS (STORAGE) =====
   async uploadFile(file, path) {
     try {
-      console.log('📤 Subiendo archivo:', file.name, 'a', path);
+      console.log('📁 Subiendo archivo:', file.name, 'a', path);
       
-      const storageRef = storage.ref().child(path);
+      const timestamp = Date.now();
+      const fileName = `${timestamp}_${file.name}`;
+      const fullPath = `${path}/${fileName}`;
+      
+      const storageRef = storage.ref().child(fullPath);
       const uploadTask = await storageRef.put(file);
+      
       const downloadURL = await uploadTask.ref.getDownloadURL();
       
-      console.log('✅ Archivo subido:', downloadURL);
-      return { success: true, url: downloadURL };
-      
+      console.log('✅ Archivo subido exitosamente:', downloadURL);
+      return {
+        url: downloadURL,
+        path: fullPath,
+        size: file.size,
+        type: file.type
+      };
     } catch (error) {
       console.error('❌ Error subiendo archivo:', error);
+      throw error;
+    }
+  },
+
+  async deleteFile(path) {
+    try {
+      const storageRef = storage.ref().child(path);
+      await storageRef.delete();
+      return true;
+    } catch (error) {
+      console.error('❌ Error eliminando archivo:', error);
+      throw error;
+    }
+  },
+
+  // ===== FUNCIONES DE UTILIDAD =====
+  async asignarObraAUsuario(userId, obraId) {
+    try {
+      await this.updateUser(userId, { obra: obraId });
+      return true;
+    } catch (error) {
+      console.error('❌ Error asignando obra:', error);
+      throw error;
+    }
+  },
+
+  async removerObraDeUsuario(userId) {
+    try {
+      await this.updateUser(userId, { obra: null });
+      return true;
+    } catch (error) {
+      console.error('❌ Error removiendo obra:', error);
+      throw error;
+    }
+  },
+
+  async getUsuariosDisponibles() {
+    try {
+      const snapshot = await db.collection('usuarios')
+        .where('obra', '==', null)
+        .get();
+      const users = [];
+      snapshot.forEach(doc => {
+        users.push({ id: doc.id, ...doc.data() });
+      });
+      return users;
+    } catch (error) {
+      console.error('❌ Error obteniendo usuarios disponibles:', error);
       throw error;
     }
   }
 };
 
-// Exportar servicios globalmente
+// Hacer disponible globalmente
 window.FirebaseService = FirebaseService;
-window.db = db;
-window.auth = auth;
-window.storage = storage;
-window.firebase = firebase;
 
-console.log('✅ Firebase configurado correctamente para proyecto: construccion-pro');
+// Log de inicialización
+console.log('🔥 Firebase inicializado correctamente');
+console.log('📊 Proyecto:', firebaseConfig.projectId);
+console.log('🗃️ Firestore habilitado');
+console.log('📁 Storage habilitado');
+console.log('✅ Todas las funciones disponibles');
