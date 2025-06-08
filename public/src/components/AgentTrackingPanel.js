@@ -1,4 +1,4 @@
-// src/components/AgentTrackingPanel.js - INTEGRADO con LocationTrackingService
+// src/components/AgentTrackingPanel.js - SOLO UBICACIONES REALES
 const { useState, useEffect, useRef } = React;
 
 const AgentTrackingPanel = ({ adminId }) => {
@@ -10,10 +10,12 @@ const AgentTrackingPanel = ({ adminId }) => {
     total: 0,
     online: 0,
     offline: 0,
-    withLocation: 0
+    withRealLocation: 0,
+    backendUsers: 0
   });
   const [debugInfo, setDebugInfo] = useState([]);
   const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [showSimulated, setShowSimulated] = useState(false); // Toggle para mostrar simuladas
   
   // Referencias
   const mapRef = useRef(null);
@@ -29,47 +31,49 @@ const AgentTrackingPanel = ({ adminId }) => {
     setDebugInfo(prev => [...prev.slice(-6), logMessage]);
   };
 
-  // Cargar empleados con ubicaciones REALES
-  const loadEmployeesWithRealLocations = async () => {
+  // Cargar SOLO empleados con ubicaciones REALES
+  const loadRealLocationEmployees = async () => {
     try {
-      addDebug('📥 Cargando empleados con ubicaciones REALES...');
+      addDebug('📥 Cargando SOLO empleados con ubicaciones REALES...');
       
-      if (!window.LocationTrackingService) {
-        addDebug('❌ LocationTrackingService no disponible');
-        return [];
-      }
-
-      // Usar el servicio de tracking para obtener empleados con ubicaciones
-      const employeesWithLocations = await window.LocationTrackingService.getAllEmployeesWithLocations();
-      
-      addDebug(`✅ ${employeesWithLocations.length} empleados obtenidos del LocationTrackingService`);
-      
-      // Convertir al formato del mapa + agregar empleados del backend
       let allEmployees = [];
 
-      // 1. Empleados con LocationTrackingService (ubicaciones reales)
-      const realLocationEmployees = employeesWithLocations.map(emp => ({
-        id: `tracking_${emp.id}`,
-        name: emp.name,
-        email: emp.email,
-        role: emp.role,
-        obra: emp.currentObra,
-        location: emp.location ? {
-          lat: emp.location.latitude,
-          lng: emp.location.longitude,
-          accuracy: emp.location.accuracy,
-          isReal: true
-        } : null,
-        isOnline: emp.location?.isOnline || false,
-        lastSeen: emp.location?.lastSeen || new Date(0),
-        source: 'tracking'
-      }));
+      // 1. EMPLEADOS CON TRACKING REAL
+      if (window.LocationTrackingService) {
+        try {
+          const employeesWithLocations = await window.LocationTrackingService.getAllEmployeesWithLocations();
+          
+          // FILTRAR: Solo empleados que tienen ubicación real
+          const realLocationEmployees = employeesWithLocations
+            .filter(emp => emp.location && emp.location.latitude && emp.location.longitude)
+            .map(emp => ({
+              id: `tracking_${emp.id}`,
+              name: emp.name,
+              email: emp.email,
+              role: emp.role,
+              obra: emp.currentObra,
+              location: {
+                lat: emp.location.latitude,
+                lng: emp.location.longitude,
+                accuracy: emp.location.accuracy,
+                isReal: true
+              },
+              isOnline: emp.location?.isOnline || false,
+              lastSeen: emp.location?.lastSeen || new Date(0),
+              source: 'tracking'
+            }));
 
-      allEmployees = allEmployees.concat(realLocationEmployees);
+          allEmployees = allEmployees.concat(realLocationEmployees);
+          addDebug(`✅ ${realLocationEmployees.length} empleados con ubicación GPS real encontrados`);
+          
+        } catch (error) {
+          addDebug(`⚠️ Error cargando LocationTrackingService: ${error.message}`);
+        }
+      }
 
-      // 2. Empleados del backend (AdminPanel) que NO están en tracking
+      // 2. USUARIOS DEL BACKEND - SOLO COMO REFERENCIA (sin ubicación simulada)
+      let backendUsersCount = 0;
       try {
-        addDebug('🔧 Verificando usuarios del backend...');
         const backendResponse = await fetch('/api/usuarios', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -78,28 +82,32 @@ const AgentTrackingPanel = ({ adminId }) => {
         
         if (backendResponse.ok) {
           const backendUsers = await backendResponse.json();
-          addDebug(`👥 Backend: ${backendUsers.length} usuarios encontrados`);
+          backendUsersCount = backendUsers.length;
+          addDebug(`📋 ${backendUsersCount} usuarios en backend (sin ubicación GPS)`);
           
-          const backendEmployees = backendUsers
-            .filter(user => !allEmployees.find(emp => emp.email === user.email))
-            .map(user => ({
-              id: `backend_${user.id}`,
-              name: `${user.nombre} ${user.apellido || ''}`.trim(),
-              email: user.email,
-              role: user.rol,
-              obra: user.obra || 'Sin obra asignada',
-              location: {
-                lat: -34.6118 + (Math.random() - 0.5) * 0.02,
-                lng: -58.3960 + (Math.random() - 0.5) * 0.02,
-                isReal: false
-              },
-              isOnline: user.activo || false,
-              lastSeen: new Date(),
-              source: 'backend'
-            }));
+          // SOLO agregar si el toggle está activado
+          if (showSimulated) {
+            const backendEmployees = backendUsers
+              .filter(user => !allEmployees.find(emp => emp.email === user.email))
+              .map(user => ({
+                id: `backend_${user.id}`,
+                name: `${user.nombre} ${user.apellido || ''}`.trim(),
+                email: user.email,
+                role: user.rol,
+                obra: user.obra || 'Sin obra asignada',
+                location: {
+                  lat: -34.6118 + (Math.random() - 0.5) * 0.02,
+                  lng: -58.3960 + (Math.random() - 0.5) * 0.02,
+                  isReal: false
+                },
+                isOnline: user.activo || false,
+                lastSeen: new Date(),
+                source: 'backend'
+              }));
 
-          allEmployees = allEmployees.concat(backendEmployees);
-          addDebug(`✅ ${backendEmployees.length} usuarios del backend agregados`);
+            allEmployees = allEmployees.concat(backendEmployees);
+            addDebug(`⚠️ ${backendEmployees.length} usuarios backend agregados como simulados`);
+          }
         }
       } catch (error) {
         addDebug(`⚠️ Error cargando backend: ${error.message}`);
@@ -110,16 +118,20 @@ const AgentTrackingPanel = ({ adminId }) => {
         total: allEmployees.length,
         online: allEmployees.filter(emp => emp.isOnline).length,
         offline: allEmployees.filter(emp => !emp.isOnline).length,
-        withLocation: allEmployees.filter(emp => emp.location).length,
-        realLocations: allEmployees.filter(emp => emp.location?.isReal).length,
-        simulatedLocations: allEmployees.filter(emp => emp.location && !emp.location?.isReal).length
+        withRealLocation: allEmployees.filter(emp => emp.location?.isReal).length,
+        backendUsers: backendUsersCount
       };
 
       setStats(statsData);
       setEmployees(allEmployees);
       setLastUpdate(new Date());
 
-      addDebug(`📊 Estadísticas: ${statsData.total} total, ${statsData.online} online, ${statsData.realLocations} ubicaciones reales`);
+      if (allEmployees.length === 0) {
+        addDebug('⚠️ NO HAY EMPLEADOS CON UBICACIÓN GPS REAL');
+        addDebug('💡 Los empleados deben activar tracking desde sus móviles');
+      } else {
+        addDebug(`📊 ${statsData.withRealLocation} empleados con GPS real visible en mapa`);
+      }
       
       return allEmployees;
 
@@ -139,7 +151,6 @@ const AgentTrackingPanel = ({ adminId }) => {
         return;
       }
 
-      // Configurar listener que se ejecuta cuando hay cambios
       locationListener.current = window.LocationTrackingService.listenToEmployeeLocations(
         (locations, error) => {
           if (error) {
@@ -147,11 +158,11 @@ const AgentTrackingPanel = ({ adminId }) => {
             return;
           }
 
-          addDebug(`🔄 Actualización en tiempo real: ${locations?.length || 0} ubicaciones`);
+          addDebug(`🔄 Cambio detectado: ${locations?.length || 0} ubicaciones actualizadas`);
           
           // Recargar empleados cuando hay cambios
-          loadEmployeesWithRealLocations().then(updatedEmployees => {
-            if (mapReady && updatedEmployees.length > 0) {
+          loadRealLocationEmployees().then(updatedEmployees => {
+            if (mapReady) {
               updateMapMarkers(updatedEmployees);
             }
           });
@@ -174,7 +185,6 @@ const AgentTrackingPanel = ({ adminId }) => {
         throw new Error('Contenedor del mapa no disponible');
       }
 
-      // Cargar Leaflet si no está disponible
       if (!window.L) {
         addDebug('📦 Cargando Leaflet...');
         await loadLeafletLibrary();
@@ -185,7 +195,6 @@ const AgentTrackingPanel = ({ adminId }) => {
       // Crear mapa centrado en Buenos Aires
       const map = window.L.map(mapRef.current).setView([-34.6118, -58.3960], 12);
       
-      // Agregar tiles de OpenStreetMap
       window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
       }).addTo(map);
@@ -195,7 +204,7 @@ const AgentTrackingPanel = ({ adminId }) => {
       addDebug('✅ Mapa creado exitosamente');
       
       // Cargar empleados y configurar listener
-      const employeesData = await loadEmployeesWithRealLocations();
+      const employeesData = await loadRealLocationEmployees();
       setupRealTimeListener();
       
       if (employeesData.length > 0) {
@@ -244,7 +253,7 @@ const AgentTrackingPanel = ({ adminId }) => {
     });
     markersRef.current = {};
 
-    // Crear marcadores para empleados con ubicación
+    // Crear marcadores solo para empleados con ubicación
     const employeesWithLocation = employeesList.filter(emp => emp.location);
     
     employeesWithLocation.forEach(employee => {
@@ -252,7 +261,7 @@ const AgentTrackingPanel = ({ adminId }) => {
       const icon = getIconByRole(employee.role);
       const isReal = employee.location.isReal;
       
-      // Icono con indicador de tipo de ubicación
+      // Icono con indicadores claros
       const customIcon = window.L.divIcon({
         html: `
           <div style="position: relative;">
@@ -260,119 +269,106 @@ const AgentTrackingPanel = ({ adminId }) => {
               background-color: ${color}; 
               color: white; 
               border-radius: 50%; 
-              width: 40px; 
-              height: 40px; 
+              width: 45px; 
+              height: 45px; 
               display: flex; 
               align-items: center; 
               justify-content: center; 
-              font-size: 18px; 
-              border: 3px solid white; 
-              box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+              font-size: 20px; 
+              border: 4px solid ${isReal ? '#10B981' : '#F59E0B'}; 
+              box-shadow: 0 3px 15px rgba(0,0,0,0.4);
               opacity: ${employee.isOnline ? 1 : 0.6};
             ">
               ${icon}
             </div>
-            <!-- Indicador de ubicación real/simulada -->
+            <!-- Indicador GPS REAL/SIMULADA más grande -->
             <div style="
               position: absolute;
-              top: -2px;
-              right: -2px;
+              top: -3px;
+              right: -3px;
               background-color: ${isReal ? '#10B981' : '#F59E0B'};
               color: white;
               border-radius: 50%;
-              width: 14px;
-              height: 14px;
+              width: 18px;
+              height: 18px;
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 8px;
+              font-size: 10px;
               border: 2px solid white;
               font-weight: bold;
             ">
-              ${isReal ? '📍' : '🎯'}
-            </div>
-            <!-- Indicador de fuente -->
-            <div style="
-              position: absolute;
-              bottom: -2px;
-              left: -2px;
-              background-color: ${employee.source === 'tracking' ? '#3B82F6' : '#8B5CF6'};
-              color: white;
-              border-radius: 50%;
-              width: 12px;
-              height: 12px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 8px;
-              border: 1px solid white;
-              font-weight: bold;
-            ">
-              ${employee.source === 'tracking' ? 'T' : 'B'}
+              ${isReal ? '📍' : '⚠️'}
             </div>
           </div>
         `,
         className: 'custom-marker',
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
+        iconSize: [45, 45],
+        iconAnchor: [22, 22]
       });
 
       const marker = window.L.marker([employee.location.lat, employee.location.lng], {
         icon: customIcon
       }).addTo(mapInstance.current);
 
-      // Popup informativo
+      // Popup informativo mejorado
       const timeSinceLastSeen = employee.lastSeen ? 
         Math.round((new Date() - employee.lastSeen) / 1000 / 60) : 0;
 
       const popupContent = `
-        <div style="padding: 10px; min-width: 250px;">
-          <div style="display: flex; align-items: center; margin-bottom: 10px;">
-            <span style="font-size: 24px; margin-right: 8px;">${icon}</span>
+        <div style="padding: 12px; min-width: 280px;">
+          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+            <span style="font-size: 28px; margin-right: 10px;">${icon}</span>
             <div>
-              <h3 style="margin: 0; font-size: 16px; font-weight: bold;">${employee.name}</h3>
-              <p style="margin: 0; color: ${color}; font-size: 14px;">${getRoleLabel(employee.role)}</p>
+              <h3 style="margin: 0; font-size: 18px; font-weight: bold; color: ${color};">${employee.name}</h3>
+              <p style="margin: 0; color: #666; font-size: 14px;">${getRoleLabel(employee.role)}</p>
             </div>
           </div>
           
-          <div style="font-size: 13px; line-height: 1.4;">
-            <p style="margin: 4px 0;"><strong>📧 Email:</strong> ${employee.email}</p>
-            <p style="margin: 4px 0;"><strong>🏗️ Obra:</strong> ${employee.obra || 'Sin asignar'}</p>
-            <p style="margin: 4px 0;"><strong>📊 Estado:</strong> 
-              <span style="color: ${employee.isOnline ? '#10B981' : '#EF4444'};">
-                ${employee.isOnline ? '🟢 En línea' : '🔴 Desconectado'}
+          <div style="font-size: 14px; line-height: 1.5;">
+            <p style="margin: 6px 0;"><strong>📧 Email:</strong> ${employee.email}</p>
+            <p style="margin: 6px 0;"><strong>🏗️ Obra:</strong> ${employee.obra || 'Sin asignar'}</p>
+            <p style="margin: 6px 0;"><strong>📊 Estado:</strong> 
+              <span style="color: ${employee.isOnline ? '#10B981' : '#EF4444'}; font-weight: bold;">
+                ${employee.isOnline ? '🟢 EN LÍNEA' : '🔴 DESCONECTADO'}
               </span>
             </p>
-            <p style="margin: 4px 0;"><strong>🕐 Última vez:</strong> 
-              ${timeSinceLastSeen < 60 ? `${timeSinceLastSeen}min` : `${Math.round(timeSinceLastSeen/60)}h`} atrás
-            </p>
-            <p style="margin: 4px 0;"><strong>📍 Ubicación:</strong> 
-              <span style="padding: 2px 6px; border-radius: 12px; background-color: ${isReal ? '#10B981' : '#F59E0B'}; color: white; font-size: 11px;">
-                ${isReal ? '🎯 GPS Real' : '📍 Simulada'}
-              </span>
-              ${employee.location.accuracy ? `(±${Math.round(employee.location.accuracy)}m)` : ''}
-            </p>
-            <p style="margin: 4px 0;"><strong>💾 Fuente:</strong> 
-              <span style="padding: 2px 6px; border-radius: 12px; background-color: ${employee.source === 'tracking' ? '#3B82F6' : '#8B5CF6'}; color: white; font-size: 11px;">
-                ${employee.source === 'tracking' ? '📡 Tracking' : '🔧 Backend'}
+            <p style="margin: 6px 0;"><strong>🕐 Última actividad:</strong> 
+              <span style="color: #666;">
+                ${timeSinceLastSeen < 60 ? `${timeSinceLastSeen} min` : `${Math.round(timeSinceLastSeen/60)} h`} atrás
               </span>
             </p>
+            <div style="margin: 8px 0; padding: 8px; border-radius: 8px; background-color: ${isReal ? '#F0FDF4' : '#FEF3C7'};">
+              <p style="margin: 0; font-weight: bold; color: ${isReal ? '#059669' : '#D97706'};">
+                📍 ${isReal ? '🎯 UBICACIÓN GPS REAL' : '⚠️ UBICACIÓN SIMULADA'}
+              </p>
+              ${employee.location.accuracy && isReal ? 
+                `<p style="margin: 2px 0 0 0; font-size: 12px; color: #666;">Precisión: ±${Math.round(employee.location.accuracy)}m</p>` : 
+                ''
+              }
+              ${!isReal ? 
+                `<p style="margin: 2px 0 0 0; font-size: 12px; color: #D97706;">Usuario debe activar tracking desde móvil</p>` : 
+                ''
+              }
+            </div>
           </div>
         </div>
       `;
 
       marker.bindPopup(popupContent, {
-        maxWidth: 300,
+        maxWidth: 320,
         className: 'custom-popup'
       });
 
       markersRef.current[employee.id] = marker;
     });
 
-    // Ajustar vista si hay marcadores
-    if (employeesWithLocation.length > 0) {
-      const group = new window.L.featureGroup(Object.values(markersRef.current));
-      mapInstance.current.fitBounds(group.getBounds().pad(0.1));
+    // Ajustar vista solo si hay marcadores reales
+    const realLocationEmployees = employeesWithLocation.filter(emp => emp.location.isReal);
+    if (realLocationEmployees.length > 0) {
+      const realMarkers = realLocationEmployees.map(emp => markersRef.current[emp.id]);
+      const group = new window.L.featureGroup(realMarkers);
+      mapInstance.current.fitBounds(group.getBounds().pad(0.2));
       
       setTimeout(() => {
         if (mapInstance.current.getZoom() > 15) {
@@ -381,18 +377,15 @@ const AgentTrackingPanel = ({ adminId }) => {
       }, 500);
     }
 
-    addDebug(`✅ ${employeesWithLocation.length} marcadores actualizados`);
+    addDebug(`✅ ${employeesWithLocation.length} marcadores actualizados (${employeesWithLocation.filter(e => e.location.isReal).length} reales)`);
   };
 
   // Utilidades
   const getColorByRole = (role) => {
     const colors = {
-      admin: '#8B5CF6',
-      administrador: '#8B5CF6',
-      jefe_obra: '#F59E0B',
-      empleado: '#10B981',
-      albañil: '#10B981',
-      albanil: '#10B981',
+      admin: '#8B5CF6', administrador: '#8B5CF6',
+      jefe_obra: '#F59E0B', empleado: '#10B981',
+      albañil: '#10B981', albanil: '#10B981',
       logistica: '#EF4444'
     };
     return colors[role] || '#6B7280';
@@ -400,12 +393,9 @@ const AgentTrackingPanel = ({ adminId }) => {
 
   const getIconByRole = (role) => {
     const icons = {
-      admin: '👑',
-      administrador: '👑',
-      jefe_obra: '👨‍💼',
-      empleado: '👷',
-      albañil: '👷',
-      albanil: '👷',
+      admin: '👑', administrador: '👑',
+      jefe_obra: '👨‍💼', empleado: '👷',
+      albañil: '👷', albanil: '👷',
       logistica: '🚚'
     };
     return icons[role] || '👤';
@@ -413,12 +403,9 @@ const AgentTrackingPanel = ({ adminId }) => {
 
   const getRoleLabel = (role) => {
     const labels = {
-      admin: 'Administrador',
-      administrador: 'Administrador',
-      jefe_obra: 'Jefe de Obra',
-      empleado: 'Empleado',
-      albañil: 'Albañil',
-      albanil: 'Albañil',
+      admin: 'Administrador', administrador: 'Administrador',
+      jefe_obra: 'Jefe de Obra', empleado: 'Empleado',
+      albañil: 'Albañil', albanil: 'Albañil',
       logistica: 'Logística'
     };
     return labels[role] || role;
@@ -427,10 +414,7 @@ const AgentTrackingPanel = ({ adminId }) => {
   // Inicialización
   useEffect(() => {
     addDebug('🚀 AgentTrackingPanel montado');
-    
-    setTimeout(() => {
-      initMap();
-    }, 1000);
+    setTimeout(() => { initMap(); }, 1000);
 
     return () => {
       addDebug('🧹 Limpiando listener...');
@@ -440,17 +424,26 @@ const AgentTrackingPanel = ({ adminId }) => {
     };
   }, []);
 
-  // Actualización periódica adicional
+  // Actualización cuando cambia el toggle
+  useEffect(() => {
+    if (mapReady) {
+      loadRealLocationEmployees().then(updatedEmployees => {
+        updateMapMarkers(updatedEmployees);
+      });
+    }
+  }, [showSimulated, mapReady]);
+
+  // Actualización periódica
   useEffect(() => {
     if (!loading && mapReady) {
       const interval = setInterval(() => {
         addDebug('🔄 Actualización periódica...');
-        loadEmployeesWithRealLocations().then(updatedEmployees => {
+        loadRealLocationEmployees().then(updatedEmployees => {
           if (updatedEmployees.length > 0) {
             updateMapMarkers(updatedEmployees);
           }
         });
-      }, 60000); // Cada minuto
+      }, 60000);
 
       return () => clearInterval(interval);
     }
@@ -465,25 +458,34 @@ const AgentTrackingPanel = ({ adminId }) => {
           <div className="flex items-center space-x-3">
             <span className="text-2xl">🗺️</span>
             <div>
-              <h1 className="text-xl font-bold">Control de Agentes en Tiempo Real</h1>
+              <h1 className="text-xl font-bold">Control de Agentes - Solo GPS Real</h1>
               <p className="text-blue-100 text-sm">
-                {stats.total} agentes • {stats.online} en línea • {stats.realLocations} ubicaciones reales
+                {stats.withRealLocation} con GPS real • {stats.backendUsers} usuarios backend sin GPS
               </p>
             </div>
           </div>
           
           <div className="flex items-center space-x-4">
+            <label className="flex items-center text-sm">
+              <input
+                type="checkbox"
+                checked={showSimulated}
+                onChange={(e) => setShowSimulated(e.target.checked)}
+                className="mr-2"
+              />
+              Mostrar simuladas
+            </label>
+            
             <div className="bg-green-500 px-3 py-1 rounded-full text-sm font-medium flex items-center">
               <div className="w-2 h-2 bg-white rounded-full mr-2 animate-pulse"></div>
-              EN VIVO
+              GPS REAL
             </div>
+            
             <button 
               onClick={() => {
                 addDebug('🔄 Actualización manual');
-                loadEmployeesWithRealLocations().then(employees => {
-                  if (employees.length > 0) {
-                    updateMapMarkers(employees);
-                  }
+                loadRealLocationEmployees().then(employees => {
+                  updateMapMarkers(employees);
                 });
               }}
               className="bg-white text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50"
@@ -494,21 +496,34 @@ const AgentTrackingPanel = ({ adminId }) => {
         </div>
       </div>
 
-      {/* ESTADÍSTICAS DETALLADAS */}
+      {/* ESTADÍSTICAS REALES */}
       <div className="absolute top-20 right-4 z-50 bg-white rounded-lg shadow-lg p-3">
-        <h4 className="font-medium text-gray-800 mb-2 text-sm">Estadísticas</h4>
+        <h4 className="font-medium text-gray-800 mb-2 text-sm">📊 Estado Real</h4>
         <div className="space-y-1 text-xs">
-          <div>👥 Total: {stats.total}</div>
-          <div>🟢 Online: {stats.online}</div>
-          <div>🔴 Offline: {stats.offline}</div>
-          <div>📍 Con ubicación: {stats.withLocation}</div>
-          <div>🎯 GPS Real: {stats.realLocations}</div>
-          <div>📍 Simulada: {stats.simulatedLocations}</div>
-          <div className="pt-1 border-t">
-            <div>🕐 {lastUpdate.toLocaleTimeString()}</div>
+          <div className="font-bold text-green-600">🎯 GPS Real: {stats.withRealLocation}</div>
+          <div className="text-gray-600">👥 Backend sin GPS: {stats.backendUsers}</div>
+          <div className="text-gray-600">🟢 Online: {stats.online}</div>
+          <div className="text-gray-600">🔴 Offline: {stats.offline}</div>
+          <div className="pt-1 border-t text-xs text-gray-500">
+            {lastUpdate.toLocaleTimeString()}
           </div>
         </div>
       </div>
+
+      {/* MENSAJE SIN UBICACIONES REALES */}
+      {!loading && stats.withRealLocation === 0 && (
+        <div className="absolute top-32 left-4 z-50 bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-sm">
+          <h4 className="font-medium text-yellow-800 mb-2">⚠️ Sin Ubicaciones GPS Reales</h4>
+          <p className="text-yellow-700 text-sm mb-2">
+            No hay empleados con GPS activo. Para aparecer en el mapa:
+          </p>
+          <ol className="text-yellow-700 text-xs space-y-1">
+            <li>1. Abrir app desde móvil</li>
+            <li>2. Ejecutar código de activación GPS</li>
+            <li>3. Aceptar permisos de ubicación</li>
+          </ol>
+        </div>
+      )}
 
       {/* DEBUG PANEL */}
       <div className="absolute top-20 left-4 z-50 bg-white rounded-lg shadow-lg p-4 max-w-xs">
@@ -516,14 +531,13 @@ const AgentTrackingPanel = ({ adminId }) => {
         <div className="space-y-1 text-sm">
           <p>📍 Contenedor: {mapRef.current ? '✅ OK' : '❌ NULL'}</p>
           <p>🗺️ Mapa: {mapReady ? '✅ Listo' : '⏳ Cargando'}</p>
-          <p>🍃 Leaflet: {window.L ? '✅ OK' : '❌ No'}</p>
           <p>📡 LocationService: {window.LocationTrackingService ? '✅ OK' : '❌ No'}</p>
           <p>🔄 Listener: {locationListener.current ? '✅ Activo' : '❌ Inactivo'}</p>
           <p>📍 Marcadores: {Object.keys(markersRef.current).length}</p>
         </div>
         
         <div className="mt-3 pt-3 border-t border-gray-200">
-          <h4 className="font-medium text-gray-700 mb-1 text-xs">Debug Log:</h4>
+          <h4 className="font-medium text-gray-700 mb-1 text-xs">Log:</h4>
           <div className="text-xs space-y-1 max-h-32 overflow-y-auto">
             {debugInfo.slice(-4).map((info, index) => (
               <div key={index} className="text-gray-600">{info}</div>
@@ -532,36 +546,13 @@ const AgentTrackingPanel = ({ adminId }) => {
         </div>
       </div>
 
-      {/* LEYENDA */}
-      <div className="absolute bottom-4 right-4 z-50 bg-white rounded-lg shadow-lg p-3">
-        <h4 className="font-medium text-gray-800 mb-2 text-sm">Leyenda</h4>
-        <div className="space-y-2 text-xs">
-          <div className="flex items-center">
-            <span className="mr-2">🎯</span>
-            <span>GPS Real</span>
-          </div>
-          <div className="flex items-center">
-            <span className="mr-2">📍</span>
-            <span>Simulada</span>
-          </div>
-          <div className="flex items-center">
-            <span className="mr-2 text-blue-600 font-bold">T</span>
-            <span>Tracking System</span>
-          </div>
-          <div className="flex items-center">
-            <span className="mr-2 text-purple-600 font-bold">B</span>
-            <span>Backend/Admin</span>
-          </div>
-        </div>
-      </div>
-
       {/* LOADING OVERLAY */}
       {loading && (
         <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-40">
           <div className="text-center">
-            <div className="text-4xl mb-2">🗺️</div>
-            <div className="text-lg font-semibold mb-2">Cargando Sistema de Tracking</div>
-            <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div className="text-4xl mb-2">🎯</div>
+            <div className="text-lg font-semibold mb-2">Cargando Solo GPS Real</div>
+            <div className="w-6 h-6 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
           </div>
         </div>
       )}
@@ -572,7 +563,7 @@ const AgentTrackingPanel = ({ adminId }) => {
         className="w-full h-full bg-gray-200"
         style={{ 
           minHeight: '600px',
-          marginTop: '80px' // Espacio para el header
+          marginTop: '80px'
         }}
       />
     </div>
