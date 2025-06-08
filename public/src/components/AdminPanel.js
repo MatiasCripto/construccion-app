@@ -1,4 +1,4 @@
-// src/components/AdminPanel.js - VERSIÓN COMPLETA FINAL CON TODAS LAS FUNCIONALIDADES
+// src/components/AdminPanel.js - VERSIÓN COMPLETA CON CRUD + EMPRESA VIVEKA
 const { useState, useEffect } = React;
 
 const AdminPanel = () => {
@@ -7,15 +7,24 @@ const AdminPanel = () => {
   const [obras, setObras] = useState([]);
   const [albaniles, setAlbaniles] = useState([]);
   const [jefesDeObra, setJefesDeObra] = useState([]);
-  const [showCreateUser, setShowCreateUser] = useState(false);
-  const [editingObra, setEditingObra] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Estados para eliminar usuario
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  // Estados para CRUD de usuarios
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [showEditUser, setShowEditUser] = useState(false);
+  const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Estados para CRUD de obras
+  const [showCreateObra, setShowCreateObra] = useState(false);
+  const [showEditObra, setShowEditObra] = useState(false);
+  const [showDeleteObraModal, setShowDeleteObraModal] = useState(false);
+  const [selectedObra, setSelectedObra] = useState(null);
+  const [obraToDelete, setObraToDelete] = useState(null);
+  const [isDeletingObra, setIsDeletingObra] = useState(false);
   
   // Estados para nuevas funcionalidades
   const [materiales, setMateriales] = useState([]);
@@ -40,6 +49,17 @@ const AdminPanel = () => {
   const [toolCategories, setToolCategories] = useState([]);
   const [toolSearch, setToolSearch] = useState('');
   const [toolCategoryFilter, setToolCategoryFilter] = useState('');
+  
+  // DATOS DE LA EMPRESA VIVEKA
+  const empresaData = {
+    nombre: 'VIVEKA',
+    email: 'vivekaemuna@gmail.com',
+    telefono: '11 24749240',
+    direccion: 'Consultas por email',
+    logo: '🏗️', // Puede ser reemplazado por logo real
+    eslogan: 'Construcción Profesional',
+    website: 'Contacto: vivekaemuna@gmail.com'
+  };
   
   const [stats, setStats] = useState({
     totalUsuarios: 0,
@@ -110,6 +130,170 @@ const AdminPanel = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ===== CRUD USUARIOS =====
+  const handleCreateUser = () => {
+    setSelectedUser(null);
+    setShowCreateUser(true);
+  };
+
+  const handleEditUser = (usuario) => {
+    setSelectedUser(usuario);
+    setShowEditUser(true);
+  };
+
+  const handleDeleteUser = (usuario) => {
+    setUserToDelete(usuario);
+    setShowDeleteUserModal(true);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      console.log('🗑️ Eliminando usuario:', userToDelete.id);
+      
+      const response = await fetch(`/api/usuarios/${userToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Error al eliminar del backend');
+      }
+
+      // Eliminar de Firebase si existe
+      if (window.db && window.FirebaseService) {
+        try {
+          const locations = await window.FirebaseService.getUserLocations(userToDelete.id, 1000);
+          for (const location of locations) {
+            await window.db.collection('user_locations').doc(location.id).delete();
+          }
+        } catch (firebaseError) {
+          console.warn('⚠️ Error eliminando ubicaciones:', firebaseError);
+        }
+
+        try {
+          const messagesSnapshot = await window.db.collection('mensajes')
+            .where('autorId', '==', userToDelete.id).get();
+          
+          const deletePromises = [];
+          messagesSnapshot.forEach(doc => {
+            deletePromises.push(doc.ref.delete());
+          });
+          await Promise.all(deletePromises);
+        } catch (firebaseError) {
+          console.warn('⚠️ Error eliminando mensajes:', firebaseError);
+        }
+
+        try {
+          await window.db.collection('usuarios').doc(userToDelete.id).delete();
+        } catch (firebaseError) {
+          console.warn('⚠️ Error eliminando usuario de Firebase:', firebaseError);
+        }
+      }
+      
+      await loadData();
+      setShowDeleteUserModal(false);
+      setUserToDelete(null);
+      
+      console.log('✅ Usuario eliminado completamente');
+      showNotification('✅ Usuario eliminado completamente', 'success');
+      
+    } catch (error) {
+      console.error('❌ Error eliminando usuario:', error);
+      showNotification('❌ Error eliminando usuario: ' + error.message, 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const cancelDeleteUser = () => {
+    setShowDeleteUserModal(false);
+    setUserToDelete(null);
+  };
+
+  // ===== CRUD OBRAS =====
+  const handleCreateObra = () => {
+    setSelectedObra(null);
+    setShowCreateObra(true);
+  };
+
+  const handleEditObra = (obra) => {
+    setSelectedObra(obra);
+    setShowEditObra(true);
+  };
+
+  const handleDeleteObra = (obra) => {
+    setObraToDelete(obra);
+    setShowDeleteObraModal(true);
+  };
+
+  const confirmDeleteObra = async () => {
+    if (!obraToDelete) return;
+    
+    setIsDeletingObra(true);
+    try {
+      console.log('🗑️ Eliminando obra:', obraToDelete.id);
+      
+      const response = await fetch(`/api/obras/${obraToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Error al eliminar obra del backend');
+      }
+
+      // Eliminar de Firebase si existe
+      if (window.db) {
+        try {
+          // Eliminar informes relacionados
+          const informesSnapshot = await window.db.collection('informes_obra')
+            .where('obra_id', '==', obraToDelete.id).get();
+          
+          const deletePromises = [];
+          informesSnapshot.forEach(doc => {
+            deletePromises.push(doc.ref.delete());
+          });
+          await Promise.all(deletePromises);
+
+          // Eliminar fotos relacionadas
+          const fotosSnapshot = await window.db.collection('fotos_obra')
+            .where('obra_id', '==', obraToDelete.id).get();
+          
+          fotosSnapshot.forEach(doc => {
+            deletePromises.push(doc.ref.delete());
+          });
+          await Promise.all(deletePromises);
+          
+        } catch (firebaseError) {
+          console.warn('⚠️ Error eliminando datos relacionados de Firebase:', firebaseError);
+        }
+      }
+      
+      await loadData();
+      setShowDeleteObraModal(false);
+      setObraToDelete(null);
+      
+      console.log('✅ Obra eliminada completamente');
+      showNotification('✅ Obra eliminada completamente', 'success');
+      
+    } catch (error) {
+      console.error('❌ Error eliminando obra:', error);
+      showNotification('❌ Error eliminando obra: ' + error.message, 'error');
+    } finally {
+      setIsDeletingObra(false);
+    }
+  };
+
+  const cancelDeleteObra = () => {
+    setShowDeleteObraModal(false);
+    setObraToDelete(null);
   };
 
   // ===== FUNCIONES PARA MATERIALES =====
@@ -204,85 +388,16 @@ const AdminPanel = () => {
     }
   };
 
-  // ===== FUNCIÓN PARA GENERAR REPORTES PDF =====
+  // ===== FUNCIÓN PARA GENERAR REPORTES PDF CON DATOS VIVEKA =====
   const generateReport = (tipo, datos = {}) => {
+    // Agregar datos de empresa VIVEKA a todos los reportes
+    const datosConEmpresa = {
+      ...datos,
+      empresa: empresaData
+    };
     setReportType(tipo);
-    setReportData(datos);
+    setReportData(datosConEmpresa);
     setShowReportGenerator(true);
-  };
-
-  // ===== FUNCIONES PARA ELIMINAR USUARIO =====
-  const handleDeleteUser = (usuario) => {
-    setUserToDelete(usuario);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDeleteUser = async () => {
-    if (!userToDelete) return;
-    
-    setIsDeleting(true);
-    try {
-      console.log('🗑️ Eliminando usuario:', userToDelete.id);
-      
-      const response = await fetch(`/api/usuarios/${userToDelete.id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Error al eliminar del backend');
-      }
-
-      // Eliminar de Firebase si existe
-      if (window.db && window.FirebaseService) {
-        try {
-          const locations = await window.FirebaseService.getUserLocations(userToDelete.id, 1000);
-          for (const location of locations) {
-            await window.db.collection('user_locations').doc(location.id).delete();
-          }
-        } catch (firebaseError) {
-          console.warn('⚠️ Error eliminando ubicaciones:', firebaseError);
-        }
-
-        try {
-          const messagesSnapshot = await window.db.collection('mensajes')
-            .where('autorId', '==', userToDelete.id).get();
-          
-          const deletePromises = [];
-          messagesSnapshot.forEach(doc => {
-            deletePromises.push(doc.ref.delete());
-          });
-          await Promise.all(deletePromises);
-        } catch (firebaseError) {
-          console.warn('⚠️ Error eliminando mensajes:', firebaseError);
-        }
-
-        try {
-          await window.db.collection('usuarios').doc(userToDelete.id).delete();
-        } catch (firebaseError) {
-          console.warn('⚠️ Error eliminando usuario de Firebase:', firebaseError);
-        }
-      }
-      
-      await loadData();
-      setShowDeleteModal(false);
-      setUserToDelete(null);
-      
-      console.log('✅ Usuario eliminado completamente');
-      showNotification('✅ Usuario eliminado completamente', 'success');
-      
-    } catch (error) {
-      console.error('❌ Error eliminando usuario:', error);
-      showNotification('❌ Error eliminando usuario: ' + error.message, 'error');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const cancelDeleteUser = () => {
-    setShowDeleteModal(false);
-    setUserToDelete(null);
   };
 
   // Funciones de utilidad
@@ -345,10 +460,6 @@ const AdminPanel = () => {
     } catch (err) {
       showNotification('Error de conexión', 'error');
     }
-  };
-
-  const handleEditObra = (obra) => {
-    setEditingObra(obra);
   };
 
   const showNotification = (message, type = 'info') => {
@@ -417,16 +528,20 @@ const AdminPanel = () => {
         </div>
       </div>
     );
+};
   }
 
   return (
     <div className="space-y-6">
-      {/* Header con estadísticas expandidas */}
+      {/* Header con datos de empresa VIVEKA */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg text-white p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold">Panel de Administración</h1>
-            <p className="text-blue-100">Gestión completa del sistema</p>
+            <h1 className="text-2xl font-bold flex items-center">
+              🏗️ {empresaData.nombre} - Panel de Administración
+            </h1>
+            <p className="text-blue-100">{empresaData.eslogan} | {empresaData.email}</p>
+            <p className="text-blue-200 text-sm">📞 {empresaData.telefono}</p>
           </div>
           <div className="text-right">
             <div className="text-sm text-blue-100">Última actualización</div>
@@ -498,7 +613,6 @@ const AdminPanel = () => {
           {[
             { key: 'usuarios', label: 'Usuarios' },
             { key: 'obras', label: 'Gestionar Obras' },
-            { key: 'crear-obra', label: 'Crear Obra' },
             { key: 'tracking', label: 'Control de Agentes' },
             { key: 'reportes', label: 'Reportes Básicos' },
             { key: 'materiales', label: 'Materiales' },
@@ -553,21 +667,21 @@ const AdminPanel = () => {
 
         {/* Contenido del panel */}
         <div className="p-6">
-          {/* SECCIÓN USUARIOS */}
+          {/* SECCIÓN USUARIOS CON CRUD COMPLETO */}
           {activeSection === 'usuarios' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Gestión de Usuarios</h2>
+                  <h2 className="text-xl font-semibold text-gray-900">👥 Gestión de Usuarios</h2>
                   <p className="text-gray-600 text-sm mt-1">
-                    Administra usuarios, roles y permisos del sistema
+                    CRUD completo: Crear, Ver, Editar y Eliminar usuarios del sistema
                   </p>
                 </div>
                 <button
-                  onClick={() => setShowCreateUser(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+                  onClick={handleCreateUser}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
                 >
-                  <span>👤</span>
+                  <span>➕</span>
                   <span>Crear Usuario</span>
                 </button>
               </div>
@@ -593,7 +707,7 @@ const AdminPanel = () => {
                           Última conexión
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Acciones
+                          Acciones CRUD
                         </th>
                       </tr>
                     </thead>
@@ -640,6 +754,13 @@ const AdminPanel = () => {
                               >
                                 👁️
                               </button>
+                              <button
+                                onClick={() => handleEditUser(usuario)}
+                                className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50"
+                                title="Editar usuario"
+                              >
+                                ✏️
+                              </button>
                               {usuario.activo && usuario.rol !== 'admin' && (
                                 <button
                                   onClick={() => desactivarUsuario(usuario.id)}
@@ -670,20 +791,26 @@ const AdminPanel = () => {
                   <div className="text-center py-12">
                     <div className="text-6xl mb-4">👥</div>
                     <p className="text-gray-500">No hay usuarios registrados</p>
+                    <button
+                      onClick={handleCreateUser}
+                      className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
+                    >
+                      ➕ Crear Primer Usuario
+                    </button>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* SECCIÓN OBRAS */}
+          {/* SECCIÓN OBRAS CON CRUD COMPLETO */}
           {activeSection === 'obras' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Gestión de Obras</h2>
+                  <h2 className="text-xl font-semibold text-gray-900">🏗️ Gestión de Obras</h2>
                   <p className="text-gray-600 text-sm mt-1">
-                    Administra todas las obras del sistema
+                    CRUD completo: Crear, Ver, Editar y Eliminar obras del sistema
                   </p>
                 </div>
                 <div className="flex items-center space-x-4">
@@ -691,10 +818,11 @@ const AdminPanel = () => {
                     Total: <span className="font-medium">{obras.length}</span> obras
                   </div>
                   <button
-                    onClick={() => setActiveSection('crear-obra')}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    onClick={handleCreateObra}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
                   >
-                    ➕ Nueva Obra
+                    <span>➕</span>
+                    <span>Crear Obra</span>
                   </button>
                 </div>
               </div>
@@ -742,16 +870,22 @@ const AdminPanel = () => {
                       
                       <div className="flex space-x-2">
                         <button
+                          onClick={() => console.log('Ver detalles:', obra.id)}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm"
+                        >
+                          👁️ Ver
+                        </button>
+                        <button
                           onClick={() => handleEditObra(obra)}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm"
                         >
                           ✏️ Editar
                         </button>
                         <button
-                          onClick={() => console.log('Ver detalles:', obra.id)}
-                          className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                          onClick={() => handleDeleteObra(obra)}
+                          className="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm"
                         >
-                          👁️ Ver
+                          🗑️ Eliminar
                         </button>
                       </div>
                     </div>
@@ -764,7 +898,7 @@ const AdminPanel = () => {
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No hay obras creadas</h3>
                     <p className="text-gray-500 mb-4">Empieza creando tu primera obra</p>
                     <button
-                      onClick={() => setActiveSection('crear-obra')}
+                      onClick={handleCreateObra}
                       className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
                     >
                       ➕ Crear Primera Obra
@@ -772,35 +906,6 @@ const AdminPanel = () => {
                   </div>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* SECCIÓN CREAR OBRA */}
-          {activeSection === 'crear-obra' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Crear Nueva Obra</h2>
-                  <p className="text-gray-600 text-sm mt-1">
-                    Completa la información para crear una nueva obra
-                  </p>
-                </div>
-                <button
-                  onClick={() => setActiveSection('obras')}
-                  className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded"
-                >
-                  ← Volver a obras
-                </button>
-              </div>
-              <CreateObraForm 
-                albaniles={albaniles} 
-                jefesDeObra={jefesDeObra}
-                onSuccess={() => {
-                  loadData();
-                  setActiveSection('obras');
-                  showNotification('Obra creada exitosamente', 'success');
-                }} 
-              />
             </div>
           )}
 
@@ -849,14 +954,14 @@ const AdminPanel = () => {
             </div>
           )}
 
-          {/* SECCIÓN REPORTES BÁSICOS */}
+          {/* SECCIÓN REPORTES BÁSICOS CON DATOS VIVEKA */}
           {activeSection === 'reportes' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Reportes y Análisis</h2>
+                  <h2 className="text-xl font-semibold text-gray-900">📊 Reportes y Análisis - {empresaData.nombre}</h2>
                   <p className="text-gray-600 text-sm mt-1">
-                    Estadísticas y reportes del sistema
+                    Estadísticas y reportes del sistema | {empresaData.email}
                   </p>
                 </div>
               </div>
@@ -865,7 +970,7 @@ const AdminPanel = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-medium text-gray-900">📊 Productividad</h3>
+                    <h3 className="font-medium text-gray-900">📊 Productividad {empresaData.nombre}</h3>
                     <span className="text-2xl">📈</span>
                   </div>
                   <div className="space-y-2">
@@ -886,7 +991,7 @@ const AdminPanel = () => {
 
                 <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-medium text-gray-900">👥 Personal</h3>
+                    <h3 className="font-medium text-gray-900">👥 Personal {empresaData.nombre}</h3>
                     <span className="text-2xl">👷</span>
                   </div>
                   <div className="space-y-2">
@@ -931,19 +1036,42 @@ const AdminPanel = () => {
                 </div>
               </div>
 
+              {/* Información de empresa VIVEKA */}
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
+                <h3 className="font-semibold text-blue-900 mb-4 flex items-center">
+                  🏗️ Información de la Empresa
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p><strong>Empresa:</strong> {empresaData.nombre}</p>
+                    <p><strong>Email:</strong> {empresaData.email}</p>
+                  </div>
+                  <div>
+                    <p><strong>Teléfono:</strong> {empresaData.telefono}</p>
+                    <p><strong>Eslogan:</strong> {empresaData.eslogan}</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Botones de reportes detallados */}
               <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
                 <h3 className="font-medium text-gray-900 mb-4">📋 Reportes Detallados</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <button className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 p-4 rounded-lg text-left transition-colors">
+                  <button 
+                    onClick={() => generateReport('reporte_obras', { obras, albaniles, jefesDeObra })}
+                    className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 p-4 rounded-lg text-left transition-colors">
                     <div className="font-medium">📊 Reporte de Obras</div>
                     <div className="text-sm text-blue-600 mt-1">Estado detallado de todas las obras</div>
                   </button>
-                  <button className="bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 p-4 rounded-lg text-left transition-colors">
+                  <button 
+                    onClick={() => generateReport('reporte_personal', { usuarios, albaniles, jefesDeObra, obras })}
+                    className="bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 p-4 rounded-lg text-left transition-colors">
                     <div className="font-medium">👥 Reporte de Personal</div>
                     <div className="text-sm text-green-600 mt-1">Rendimiento y asignaciones</div>
                   </button>
-                  <button className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 p-4 rounded-lg text-left transition-colors">
+                  <button 
+                    onClick={() => generateReport('reporte_ubicaciones', { usuarios, obras })}
+                    className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 p-4 rounded-lg text-left transition-colors">
                     <div className="font-medium">🗺️ Reporte de Ubicaciones</div>
                     <div className="text-sm text-purple-600 mt-1">Tracking y geolocalización</div>
                   </button>
@@ -958,7 +1086,7 @@ const AdminPanel = () => {
               {/* Header */}
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-800">🧱 Gestión de Materiales</h2>
+                  <h2 className="text-2xl font-bold text-gray-800">🧱 Gestión de Materiales - {empresaData.nombre}</h2>
                   <p className="text-gray-600">Administrar lista de materiales disponibles para los albañiles</p>
                 </div>
                 <button
@@ -1111,7 +1239,7 @@ const AdminPanel = () => {
                             {material.unidad}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {material.precio_estimado ? `$${material.precio_estimado}` : '-'}
+                            {material.precio_estimado ? `${material.precio_estimado}` : '-'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -1175,7 +1303,7 @@ const AdminPanel = () => {
               {/* Header */}
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-800">🔧 Gestión de Herramientas</h2>
+                  <h2 className="text-2xl font-bold text-gray-800">🔧 Gestión de Herramientas - {empresaData.nombre}</h2>
                   <p className="text-gray-600">Administrar lista de herramientas disponibles para los trabajadores</p>
                 </div>
                 <button
@@ -1400,7 +1528,7 @@ const AdminPanel = () => {
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-                    📋 Informes Diarios de Obra
+                    📋 Informes Diarios de Obra - {empresaData.nombre}
                     {stats.informesPendientes > 0 && (
                       <span className="ml-2 bg-red-100 text-red-600 text-xs px-2 py-1 rounded-full animate-pulse">
                         {stats.informesPendientes} nuevos
@@ -1534,9 +1662,9 @@ const AdminPanel = () => {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">🎯 Reportes Avanzados y PDFs</h2>
+                  <h2 className="text-xl font-semibold text-gray-900">🎯 Reportes Avanzados y PDFs - {empresaData.nombre}</h2>
                   <p className="text-gray-600 text-sm mt-1">
-                    Genera reportes profesionales con formato de empresa
+                    Genera reportes profesionales con formato de empresa | {empresaData.email}
                   </p>
                 </div>
               </div>
@@ -1549,7 +1677,7 @@ const AdminPanel = () => {
                     <span className="text-3xl">🏗️</span>
                   </div>
                   <p className="text-sm text-blue-700 mb-4">
-                    Estado detallado de todas las obras con logos y formato profesional
+                    Estado detallado de todas las obras con logos y formato profesional de {empresaData.nombre}
                   </p>
                   <button
                     onClick={() => generateReport('informe_obras', { obras, albaniles, jefesDeObra })}
@@ -1565,7 +1693,7 @@ const AdminPanel = () => {
                     <span className="text-3xl">👷</span>
                   </div>
                   <p className="text-sm text-green-700 mb-4">
-                    Estadísticas de rendimiento y asignaciones del personal
+                    Estadísticas de rendimiento y asignaciones del personal de {empresaData.nombre}
                   </p>
                   <button
                     onClick={() => generateReport('reporte_personal', { usuarios, albaniles, jefesDeObra, obras })}
@@ -1581,7 +1709,7 @@ const AdminPanel = () => {
                     <span className="text-3xl">📷</span>
                   </div>
                   <p className="text-sm text-purple-700 mb-4">
-                    Reporte con todas las fotos de obras con formato profesional
+                    Reporte con todas las fotos de obras con formato profesional y logo de {empresaData.nombre}
                   </p>
                   <button
                     onClick={() => generateReport('relevamiento', { obras, fotos: [] })}
@@ -1597,7 +1725,7 @@ const AdminPanel = () => {
                     <span className="text-3xl">📋</span>
                   </div>
                   <p className="text-sm text-orange-700 mb-4">
-                    Presupuestos con formato remito y logo de empresa
+                    Presupuestos con formato remito y logo de {empresaData.nombre}
                   </p>
                   <button
                     onClick={() => generateReport('presupuesto', { materiales, obras })}
@@ -1613,7 +1741,7 @@ const AdminPanel = () => {
                     <span className="text-3xl">📊</span>
                   </div>
                   <p className="text-sm text-red-700 mb-4">
-                    Métricas completas de productividad y rendimiento
+                    Métricas completas de productividad y rendimiento de {empresaData.nombre}
                   </p>
                   <button
                     onClick={() => generateReport('estadisticas', { 
@@ -1632,7 +1760,7 @@ const AdminPanel = () => {
                     <span className="text-3xl">⚡</span>
                   </div>
                   <p className="text-sm text-yellow-700 mb-4">
-                    Trabajos realizados por fecha y empleado
+                    Trabajos realizados por fecha y empleado para {empresaData.nombre}
                   </p>
                   <button
                     onClick={() => generateReport('trabajo_diario', { informesObra, albaniles, obras })}
@@ -1640,6 +1768,23 @@ const AdminPanel = () => {
                   >
                     📄 Generar PDF
                   </button>
+                </div>
+              </div>
+
+              {/* Información de empresa VIVEKA en reportes */}
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-6">
+                <h3 className="font-semibold text-blue-900 mb-4 flex items-center">
+                  🏗️ Todos los PDFs incluyen datos de {empresaData.nombre}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p><strong>🏢 Empresa:</strong> {empresaData.nombre}</p>
+                    <p><strong>📧 Email:</strong> {empresaData.email}</p>
+                  </div>
+                  <div>
+                    <p><strong>📞 Teléfono:</strong> {empresaData.telefono}</p>
+                    <p><strong>💼 Eslogan:</strong> {empresaData.eslogan}</p>
+                  </div>
                 </div>
               </div>
 
@@ -1714,13 +1859,43 @@ const AdminPanel = () => {
               </div>
             </div>
           )}
+
         </div>
       </div>
       
-      {/* TODOS LOS MODALES */}
+      {/* TODOS LOS MODALES CRUD */}
       
+      {/* Modal crear usuario */}
+      {showCreateUser && (
+        <CreateUserModal
+          onClose={() => setShowCreateUser(false)}
+          onSuccess={() => {
+            setShowCreateUser(false);
+            loadData();
+            showNotification('Usuario creado exitosamente', 'success');
+          }}
+        />
+      )}
+
+      {/* Modal editar usuario */}
+      {showEditUser && selectedUser && (
+        <EditUserModal
+          user={selectedUser}
+          onClose={() => {
+            setShowEditUser(false);
+            setSelectedUser(null);
+          }}
+          onSuccess={() => {
+            setShowEditUser(false);
+            setSelectedUser(null);
+            loadData();
+            showNotification('Usuario actualizado exitosamente', 'success');
+          }}
+        />
+      )}
+
       {/* Modal eliminar usuario */}
-      {showDeleteModal && userToDelete && (
+      {showDeleteUserModal && userToDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="text-center">
@@ -1762,31 +1937,91 @@ const AdminPanel = () => {
           </div>
         </div>
       )}
-      
-      {/* Modal crear usuario */}
-      {showCreateUser && (
-        <CreateUserModal
-          onClose={() => setShowCreateUser(false)}
+
+      {/* Modal crear obra */}
+      {showCreateObra && (
+        <CreateObraModal
+          albaniles={albaniles}
+          jefesDeObra={jefesDeObra}
+          onClose={() => setShowCreateObra(false)}
           onSuccess={() => {
-            setShowCreateUser(false);
+            setShowCreateObra(false);
             loadData();
-            showNotification('Usuario creado exitosamente', 'success');
+            showNotification('Obra creada exitosamente', 'success');
           }}
         />
       )}
 
       {/* Modal editar obra */}
-      {editingObra && (
+      {showEditObra && selectedObra && (
         <EditObraModal
-          obra={editingObra}
+          obra={selectedObra}
           albaniles={albaniles}
           jefesDeObra={jefesDeObra}
-          onClose={() => setEditingObra(null)}
+          onClose={() => {
+            setShowEditObra(false);
+            setSelectedObra(null);
+          }}
           onSuccess={() => {
-            setEditingObra(null);
+            setShowEditObra(false);
+            setSelectedObra(null);
             loadData();
             showNotification('Obra actualizada exitosamente', 'success');
           }}
+        />
+      )}
+
+      {/* Modal eliminar obra */}
+      {showDeleteObraModal && obraToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="text-center">
+              <div className="text-6xl mb-4">⚠️</div>
+              <h3 className="text-lg font-semibold mb-2 text-red-600">
+                ¿Eliminar Obra Definitivamente?
+              </h3>
+              <div className="text-gray-700 mb-4">
+                <p className="font-medium">{obraToDelete.nombre}</p>
+                <p className="text-sm text-gray-500">{obraToDelete.ubicacion}</p>
+                <p className="text-sm text-gray-500">Estado: {getEstadoLabel(obraToDelete.estado)}</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 p-3 rounded mb-4">
+                <p className="text-red-800 text-sm">
+                  <strong>⚠️ ADVERTENCIA:</strong> Esta acción NO se puede deshacer.
+                </p>
+                <p className="text-red-700 text-xs mt-1">
+                  Se eliminarán todos los datos relacionados: informes, fotos, etc.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={confirmDeleteObra}
+                disabled={isDeletingObra}
+                className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600 disabled:opacity-50"
+              >
+                {isDeletingObra ? '🔄 Eliminando...' : '🗑️ SÍ, ELIMINAR'}
+              </button>
+              <button
+                onClick={cancelDeleteObra}
+                disabled={isDeletingObra}
+                className="flex-1 bg-gray-500 text-white py-2 rounded hover:bg-gray-600 disabled:opacity-50"
+              >
+                ❌ Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal generador de reportes con datos VIVEKA */}
+      {showReportGenerator && (
+        <ReportGeneratorViveka 
+          tipo={reportType}
+          datos={reportData}
+          empresa={empresaData}
+          onClose={() => setShowReportGenerator(false)}
         />
       )}
 
@@ -1831,588 +2066,11 @@ const AdminPanel = () => {
           categorias={toolCategories}
         />
       )}
-
-      {/* Modal generador de reportes */}
-      {showReportGenerator && (
-        <ReportGenerator 
-          tipo={reportType}
-          datos={reportData}
-          onClose={() => setShowReportGenerator(false)}
-        />
-      )}
     </div>
   );
 };
 
-// ===== COMPONENTES AUXILIARES =====
-
-// Modal para crear usuario
-const CreateUserModal = ({ onClose, onSuccess }) => {
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    nombre: '',
-    apellido: '',
-    rol: 'albanil'
-  });
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      // 1. CREAR EN BACKEND (como antes)
-      const response = await fetch('/api/usuarios', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        const backendUser = await response.json();
-        
-        // 2. CREAR EN FIREBASE (NUEVO - SINCRONIZACIÓN)
-        if (window.FirebaseService && window.db) {
-          try {
-            console.log('🔥 Sincronizando usuario con Firebase...');
-            await window.db.collection('usuarios').add({
-              nombre: formData.nombre,
-              email: formData.email,
-              rol: formData.rol,
-              activo: true,
-              backendId: backendUser.id,
-              username: formData.username,
-              apellido: formData.apellido,
-              created_at: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            console.log('✅ Usuario sincronizado con Firebase');
-          } catch (firebaseError) {
-            console.warn('⚠️ Error sincronizando con Firebase:', firebaseError);
-          }
-        }
-        
-        onSuccess();
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Error al crear usuario');
-      }
-    } catch (err) {
-      alert('Error de conexión');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-md w-full p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">👤 Crear Nuevo Usuario</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            ✕
-          </button>
-        </div>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre *
-              </label>
-              <input
-                type="text"
-                value={formData.nombre}
-                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Apellido *
-              </label>
-              <input
-                type="text"
-                value={formData.apellido}
-                onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Usuario *
-            </label>
-            <input
-              type="text"
-              value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email *
-            </label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Contraseña *
-            </label>
-            <input
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-              minLength="6"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Rol *
-            </label>
-            <select
-              value={formData.rol}
-              onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="albanil">👷 Albañil</option>
-              <option value="jefe_obra">🛠️ Jefe de Obra</option>
-              <option value="logistica">🚚 Logística</option>
-              <option value="admin">👑 Administrador</option>
-            </select>
-          </div>
-          
-          <div className="flex space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-lg font-medium"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium disabled:opacity-50"
-            >
-              {loading ? 'Creando...' : 'Crear Usuario'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-// Formulario para crear obra
-const CreateObraForm = ({ albaniles, jefesDeObra, onSuccess }) => {
-  const [formData, setFormData] = useState({
-    nombre: '',
-    ubicacion: '',
-    descripcion: '',
-    albanil_asignado: '',
-    jefe_obra: '',
-    latitud: null,
-    longitud: null
-  });
-  const [loading, setLoading] = useState(false);
-
-  const handleLocationSelect = (location) => {
-    setFormData(prev => ({
-      ...prev,
-      latitud: location.lat,
-      longitud: location.lng
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!formData.latitud || !formData.longitud) {
-      alert('Por favor selecciona una ubicación en el mapa');
-      return;
-    }
-    
-    setLoading(true);
-
-    try {
-      const response = await fetch('/api/obras', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        setFormData({
-          nombre: '',
-          ubicacion: '',
-          descripcion: '',
-          albanil_asignado: '',
-          jefe_obra: '',
-          latitud: null,
-          longitud: null
-        });
-        if (onSuccess) onSuccess();
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Error al crear obra');
-      }
-    } catch (err) {
-      alert('Error de conexión');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nombre de la Obra *
-            </label>
-            <input
-              type="text"
-              value={formData.nombre}
-              onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descripción de Ubicación *
-            </label>
-            <input
-              type="text"
-              value={formData.ubicacion}
-              onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
-              placeholder="Ej: Av. Corrientes 1234, CABA"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Descripción del Trabajo
-          </label>
-          <textarea
-            value={formData.descripcion}
-            onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            rows="3"
-            placeholder="Describe el trabajo a realizar..."
-          />
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Albañil Asignado *
-            </label>
-            <select
-              value={formData.albanil_asignado}
-              onChange={(e) => setFormData({ ...formData, albanil_asignado: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              <option value="">Seleccionar albañil</option>
-              {albaniles.map(albanil => (
-                <option key={albanil.id} value={albanil.id}>
-                  👷 {albanil.nombre} {albanil.apellido}
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Jefe de Obra
-            </label>
-            <select
-              value={formData.jefe_obra}
-              onChange={(e) => setFormData({ ...formData, jefe_obra: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Seleccionar jefe de obra</option>
-              {jefesDeObra.map(jefe => (
-                <option key={jefe.id} value={jefe.id}>
-                  🛠️ {jefe.nombre} {jefe.apellido}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Selector de Mapa */}
-        <div>
-          {window.MapSelector ? (
-            <MapSelector
-              onLocationSelect={handleLocationSelect}
-              initialLocation={formData.latitud && formData.longitud ? 
-                { lat: formData.latitud, lng: formData.longitud } : null
-              }
-            />
-          ) : (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-yellow-800">
-                ⚠️ Componente MapSelector no está disponible. Asegúrate de que Google Maps esté cargado.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {(!formData.latitud || !formData.longitud) && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-yellow-800 text-sm">
-              ⚠️ Debes seleccionar una ubicación en el mapa antes de crear la obra
-            </p>
-          </div>
-        )}
-        
-        <button
-          type="submit"
-          disabled={loading || !formData.latitud || !formData.longitud}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Creando...' : '🏗️ Crear Obra'}
-        </button>
-      </form>
-    </div>
-  );
-};
-
-// Modal para editar obra
-const EditObraModal = ({ obra, albaniles, jefesDeObra, onClose, onSuccess }) => {
-  const [formData, setFormData] = useState({
-    nombre: obra.nombre || '',
-    ubicacion: obra.ubicacion || '',
-    descripcion: obra.descripcion || '',
-    albanil_asignado: obra.albanil_asignado || '',
-    jefe_obra: obra.jefe_obra || '',
-    latitud: obra.latitud || null,
-    longitud: obra.longitud || null
-  });
-  const [loading, setLoading] = useState(false);
-
-  const handleLocationSelect = (location) => {
-    setFormData(prev => ({
-      ...prev,
-      latitud: location.lat,
-      longitud: location.lng
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!formData.latitud || !formData.longitud) {
-      alert('Por favor selecciona una ubicación en el mapa');
-      return;
-    }
-    
-    setLoading(true);
-
-    try {
-      const response = await fetch(`/api/obras/${obra.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        onSuccess();
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Error al actualizar obra');
-      }
-    } catch (err) {
-      alert('Error de conexión');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">✏️ Editar Obra: {obra.nombre}</h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-              ✕
-            </button>
-          </div>
-        </div>
-        
-        <div className="p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre de la Obra *
-                </label>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descripción de Ubicación *
-                </label>
-                <input
-                  type="text"
-                  value={formData.ubicacion}
-                  onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
-                  placeholder="Ej: Av. Corrientes 1234, CABA"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descripción del Trabajo
-              </label>
-              <textarea
-                value={formData.descripcion}
-                onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows="3"
-                placeholder="Describe el trabajo a realizar..."
-              />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Albañil Asignado *
-                </label>
-                <select
-                  value={formData.albanil_asignado}
-                  onChange={(e) => setFormData({ ...formData, albanil_asignado: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Seleccionar albañil</option>
-                  {albaniles.map(albanil => (
-                    <option key={albanil.id} value={albanil.id}>
-                      👷 {albanil.nombre} {albanil.apellido}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Jefe de Obra
-                </label>
-                <select
-                  value={formData.jefe_obra}
-                  onChange={(e) => setFormData({ ...formData, jefe_obra: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Seleccionar jefe de obra</option>
-                  {jefesDeObra.map(jefe => (
-                    <option key={jefe.id} value={jefe.id}>
-                      🛠️ {jefe.nombre} {jefe.apellido}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Información de cambio de albañil */}
-            {formData.albanil_asignado != obra.albanil_asignado && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-start">
-                  <span className="text-yellow-600 text-lg mr-2">⚠️</span>
-                  <div>
-                    <h4 className="text-yellow-800 font-medium">Cambio de Albañil Detectado</h4>
-                    <p className="text-yellow-700 text-sm mt-1">
-                      Al cambiar el albañil asignado, la obra se transferirá al nuevo empleado
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Selector de Mapa */}
-            <div>
-              {window.MapSelector ? (
-                <MapSelector
-                  onLocationSelect={handleLocationSelect}
-                  initialLocation={formData.latitud && formData.longitud ? 
-                    { lat: formData.latitud, lng: formData.longitud } : null
-                  }
-                />
-              ) : (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-yellow-800">
-                    ⚠️ Componente MapSelector no está disponible.
-                  </p>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-3 px-4 rounded-lg font-medium"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={loading || !formData.latitud || !formData.longitud}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Actualizando...' : '💾 Guardar Cambios'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-};
+// ===== COMPONENTES AUXILIARES CRUD =====
 
 // Modal para materiales
 const MaterialModal = ({ material, onClose, onSave, categorias }) => {
@@ -2889,25 +2547,831 @@ const ToolModal = ({ tool, onClose, onSave, categorias }) => {
       </div>
     </div>
   );
+    </div>
+  );
 };
 
-// Generador de reportes simplificado incluido
-const ReportGenerator = ({ tipo, datos, onClose }) => {
+// ===== COMPONENTES AUXILIARES CRUD =====
+
+// Modal para crear usuario
+const CreateUserModal = ({ onClose, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    password: '',
+    nombre: '',
+    apellido: '',
+    rol: 'albanil'
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      // 1. CREAR EN BACKEND (como antes)
+      const response = await fetch('/api/usuarios', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (response.ok) {
+        const backendUser = await response.json();
+        
+        // 2. CREAR EN FIREBASE (NUEVO - SINCRONIZACIÓN)
+        if (window.FirebaseService && window.db) {
+          try {
+            console.log('🔥 Sincronizando usuario con Firebase...');
+            await window.db.collection('usuarios').add({
+              nombre: formData.nombre,
+              email: formData.email,
+              rol: formData.rol,
+              activo: true,
+              backendId: backendUser.id,
+              username: formData.username,
+              apellido: formData.apellido,
+              created_at: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log('✅ Usuario sincronizado con Firebase');
+          } catch (firebaseError) {
+            console.warn('⚠️ Error sincronizando con Firebase:', firebaseError);
+          }
+        }
+        
+        onSuccess();
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Error al crear usuario');
+      }
+    } catch (err) {
+      alert('Error de conexión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-md w-full p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">➕ Crear Nuevo Usuario</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            ✕
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nombre *
+              </label>
+              <input
+                type="text"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Apellido *
+              </label>
+              <input
+                type="text"
+                value={formData.apellido}
+                onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Usuario *
+            </label>
+            <input
+              type="text"
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email *
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Contraseña *
+            </label>
+            <input
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+              minLength="6"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Rol *
+            </label>
+            <select
+              value={formData.rol}
+              onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="albanil">👷 Albañil</option>
+              <option value="jefe_obra">🛠️ Jefe de Obra</option>
+              <option value="logistica">🚚 Logística</option>
+              <option value="admin">👑 Administrador</option>
+            </select>
+          </div>
+          
+          <div className="flex space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-lg font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg font-medium disabled:opacity-50"
+            >
+              {loading ? 'Creando...' : '➕ Crear Usuario'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Modal para editar usuario
+const EditUserModal = ({ user, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    username: user.username || '',
+    email: user.email || '',
+    nombre: user.nombre || '',
+    apellido: user.apellido || '',
+    rol: user.rol || 'albanil',
+    activo: user.activo !== undefined ? user.activo : true
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const response = await fetch(`/api/usuarios/${user.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (response.ok) {
+        // Actualizar en Firebase si existe
+        if (window.db) {
+          try {
+            const firebaseSnapshot = await window.db.collection('usuarios')
+              .where('backendId', '==', user.id).get();
+            
+            if (!firebaseSnapshot.empty) {
+              const firebaseDoc = firebaseSnapshot.docs[0];
+              await firebaseDoc.ref.update({
+                nombre: formData.nombre,
+                email: formData.email,
+                rol: formData.rol,
+                activo: formData.activo,
+                username: formData.username,
+                apellido: formData.apellido,
+                updated_at: firebase.firestore.FieldValue.serverTimestamp()
+              });
+              console.log('✅ Usuario actualizado en Firebase');
+            }
+          } catch (firebaseError) {
+            console.warn('⚠️ Error actualizando Firebase:', firebaseError);
+          }
+        }
+        
+        onSuccess();
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Error al actualizar usuario');
+      }
+    } catch (err) {
+      alert('Error de conexión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-md w-full p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">✏️ Editar Usuario</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            ✕
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nombre *
+              </label>
+              <input
+                type="text"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Apellido *
+              </label>
+              <input
+                type="text"
+                value={formData.apellido}
+                onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Usuario *
+            </label>
+            <input
+              type="text"
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email *
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Rol *
+            </label>
+            <select
+              value={formData.rol}
+              onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="albanil">👷 Albañil</option>
+              <option value="jefe_obra">🛠️ Jefe de Obra</option>
+              <option value="logistica">🚚 Logística</option>
+              <option value="admin">👑 Administrador</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Estado
+            </label>
+            <select
+              value={formData.activo}
+              onChange={(e) => setFormData({ ...formData, activo: e.target.value === 'true' })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="true">🟢 Activo</option>
+              <option value="false">🔴 Inactivo</option>
+            </select>
+          </div>
+          
+          <div className="flex space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-lg font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg font-medium disabled:opacity-50"
+            >
+              {loading ? 'Actualizando...' : '✏️ Actualizar Usuario'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Modal para crear obra
+const CreateObraModal = ({ albaniles, jefesDeObra, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    nombre: '',
+    ubicacion: '',
+    descripcion: '',
+    albanil_asignado: '',
+    jefe_obra: '',
+    latitud: null,
+    longitud: null
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleLocationSelect = (location) => {
+    setFormData(prev => ({
+      ...prev,
+      latitud: location.lat,
+      longitud: location.lng
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.latitud || !formData.longitud) {
+      alert('Por favor selecciona una ubicación en el mapa');
+      return;
+    }
+    
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/obras', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (response.ok) {
+        setFormData({
+          nombre: '',
+          ubicacion: '',
+          descripcion: '',
+          albanil_asignado: '',
+          jefe_obra: '',
+          latitud: null,
+          longitud: null
+        });
+        onSuccess();
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Error al crear obra');
+      }
+    } catch (err) {
+      alert('Error de conexión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold">➕ Crear Nueva Obra</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              ✕
+            </button>
+          </div>
+        </div>
+        
+        <div className="p-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre de la Obra *
+                </label>
+                <input
+                  type="text"
+                  value={formData.nombre}
+                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descripción de Ubicación *
+                </label>
+                <input
+                  type="text"
+                  value={formData.ubicacion}
+                  onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
+                  placeholder="Ej: Av. Corrientes 1234, CABA"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descripción del Trabajo
+              </label>
+              <textarea
+                value={formData.descripcion}
+                onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows="3"
+                placeholder="Describe el trabajo a realizar..."
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Albañil Asignado *
+                </label>
+                <select
+                  value={formData.albanil_asignado}
+                  onChange={(e) => setFormData({ ...formData, albanil_asignado: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Seleccionar albañil</option>
+                  {albaniles.map(albanil => (
+                    <option key={albanil.id} value={albanil.id}>
+                      👷 {albanil.nombre} {albanil.apellido}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Jefe de Obra
+                </label>
+                <select
+                  value={formData.jefe_obra}
+                  onChange={(e) => setFormData({ ...formData, jefe_obra: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccionar jefe de obra</option>
+                  {jefesDeObra.map(jefe => (
+                    <option key={jefe.id} value={jefe.id}>
+                      🛠️ {jefe.nombre} {jefe.apellido}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Selector de Mapa */}
+            <div>
+              {window.MapSelector ? (
+                <MapSelector
+                  onLocationSelect={handleLocationSelect}
+                  initialLocation={formData.latitud && formData.longitud ? 
+                    { lat: formData.latitud, lng: formData.longitud } : null
+                  }
+                />
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-yellow-800">
+                    ⚠️ Componente MapSelector no está disponible. Asegúrate de que Google Maps esté cargado.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {(!formData.latitud || !formData.longitud) && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-yellow-800 text-sm">
+                  ⚠️ Debes seleccionar una ubicación en el mapa antes de crear la obra
+                </p>
+              </div>
+            )}
+            
+            <div className="flex space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-3 px-4 rounded-lg font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !formData.latitud || !formData.longitud}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Creando...' : '➕ Crear Obra'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Modal para editar obra
+const EditObraModal = ({ obra, albaniles, jefesDeObra, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    nombre: obra.nombre || '',
+    ubicacion: obra.ubicacion || '',
+    descripcion: obra.descripcion || '',
+    albanil_asignado: obra.albanil_asignado || '',
+    jefe_obra: obra.jefe_obra || '',
+    latitud: obra.latitud || null,
+    longitud: obra.longitud || null,
+    estado: obra.estado || 'pendiente'
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleLocationSelect = (location) => {
+    setFormData(prev => ({
+      ...prev,
+      latitud: location.lat,
+      longitud: location.lng
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.latitud || !formData.longitud) {
+      alert('Por favor selecciona una ubicación en el mapa');
+      return;
+    }
+    
+    setLoading(true);
+
+    try {
+      const response = await fetch(`/api/obras/${obra.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (response.ok) {
+        onSuccess();
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Error al actualizar obra');
+      }
+    } catch (err) {
+      alert('Error de conexión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold">✏️ Editar Obra: {obra.nombre}</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              ✕
+            </button>
+          </div>
+        </div>
+        
+        <div className="p-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre de la Obra *
+                </label>
+                <input
+                  type="text"
+                  value={formData.nombre}
+                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Estado *
+                </label>
+                <select
+                  value={formData.estado}
+                  onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="pendiente">⏳ Pendiente</option>
+                  <option value="en_progreso">🚧 En Progreso</option>
+                  <option value="completada">✅ Completada</option>
+                  <option value="cancelada">❌ Cancelada</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descripción de Ubicación *
+              </label>
+              <input
+                type="text"
+                value={formData.ubicacion}
+                onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
+                placeholder="Ej: Av. Corrientes 1234, CABA"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descripción del Trabajo
+              </label>
+              <textarea
+                value={formData.descripcion}
+                onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows="3"
+                placeholder="Describe el trabajo a realizar..."
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Albañil Asignado *
+                </label>
+                <select
+                  value={formData.albanil_asignado}
+                  onChange={(e) => setFormData({ ...formData, albanil_asignado: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Seleccionar albañil</option>
+                  {albaniles.map(albanil => (
+                    <option key={albanil.id} value={albanil.id}>
+                      👷 {albanil.nombre} {albanil.apellido}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Jefe de Obra
+                </label>
+                <select
+                  value={formData.jefe_obra}
+                  onChange={(e) => setFormData({ ...formData, jefe_obra: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Seleccionar jefe de obra</option>
+                  {jefesDeObra.map(jefe => (
+                    <option key={jefe.id} value={jefe.id}>
+                      🛠️ {jefe.nombre} {jefe.apellido}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Información de cambio de albañil */}
+            {formData.albanil_asignado != obra.albanil_asignado && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <span className="text-yellow-600 text-lg mr-2">⚠️</span>
+                  <div>
+                    <h4 className="text-yellow-800 font-medium">Cambio de Albañil Detectado</h4>
+                    <p className="text-yellow-700 text-sm mt-1">
+                      Al cambiar el albañil asignado, la obra se transferirá al nuevo empleado
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Selector de Mapa */}
+            <div>
+              {window.MapSelector ? (
+                <MapSelector
+                  onLocationSelect={handleLocationSelect}
+                  initialLocation={formData.latitud && formData.longitud ? 
+                    { lat: formData.latitud, lng: formData.longitud } : null
+                  }
+                />
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-yellow-800">
+                    ⚠️ Componente MapSelector no está disponible.
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-3 px-4 rounded-lg font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !formData.latitud || !formData.longitud}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Actualizando...' : '✏️ Actualizar Obra'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Generador de reportes con datos VIVEKA
+const ReportGeneratorViveka = ({ tipo, datos, empresa, onClose }) => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const generatePDF = async () => {
     setIsGenerating(true);
     
     try {
-      // Simular generación de PDF
+      // Simular generación de PDF con datos de VIVEKA
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      const fileName = `Reporte_${tipo}_${new Date().toISOString().split('T')[0]}.pdf`;
-      console.log('📄 PDF generado:', fileName);
+      const fileName = `${empresa.nombre}_${tipo}_${new Date().toISOString().split('T')[0]}.pdf`;
+      console.log('📄 PDF generado para VIVEKA:', fileName);
+      console.log('🏗️ Empresa:', empresa);
       console.log('📊 Datos:', datos);
       
+      // Crear contenido del PDF con datos de empresa
+      const pdfContent = `
+📄 REPORTE ${tipo.toUpperCase()} - ${empresa.nombre}
+
+🏗️ EMPRESA: ${empresa.nombre}
+📧 EMAIL: ${empresa.email}  
+📞 TELÉFONO: ${empresa.telefono}
+💼 ESLOGAN: ${empresa.eslogan}
+
+📊 DATOS DEL REPORTE:
+${JSON.stringify(datos, null, 2)}
+
+📅 GENERADO: ${new Date().toLocaleString('es-ES')}
+`;
+      
       // Simular descarga
-      const blob = new Blob(['Contenido del PDF simulado'], { type: 'text/plain' });
+      const blob = new Blob([pdfContent], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       
       const link = document.createElement('a');
@@ -2918,7 +3382,7 @@ const ReportGenerator = ({ tipo, datos, onClose }) => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      alert('✅ PDF generado exitosamente');
+      alert(`✅ PDF de ${empresa.nombre} generado exitosamente`);
       
     } catch (error) {
       console.error('❌ Error generando PDF:', error);
@@ -2928,13 +3392,39 @@ const ReportGenerator = ({ tipo, datos, onClose }) => {
     }
   };
 
+  const getTipoLabel = (tipo) => {
+    const labels = {
+      reporte_obras: 'Reporte de Obras',
+      reporte_personal: 'Reporte de Personal', 
+      reporte_ubicaciones: 'Reporte de Ubicaciones',
+      relevamiento: 'Relevamiento Fotográfico',
+      presupuesto: 'Presupuesto',
+      estadisticas: 'Estadísticas Avanzadas',
+      trabajo_diario: 'Informes de Trabajo',
+      informe_obra: 'Informe de Obra'
+    };
+    return labels[tipo] || tipo;
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
         <div className="text-center">
-          <h3 className="text-lg font-semibold mb-4">📄 Generar Reporte PDF</h3>
+          <div className="text-4xl mb-4">🏗️</div>
+          <h3 className="text-lg font-semibold mb-2">{empresa.nombre}</h3>
+          <h4 className="text-md font-medium mb-4">📄 Generar Reporte PDF</h4>
+          
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <div className="text-sm text-blue-800">
+              <p><strong>Tipo:</strong> {getTipoLabel(tipo)}</p>
+              <p><strong>Empresa:</strong> {empresa.nombre}</p>
+              <p><strong>Email:</strong> {empresa.email}</p>
+              <p><strong>Teléfono:</strong> {empresa.telefono}</p>
+            </div>
+          </div>
+
           <p className="text-gray-600 mb-6">
-            Se generará un reporte profesional de tipo: <strong>{tipo}</strong>
+            Se generará un reporte profesional con el logo y datos de <strong>{empresa.nombre}</strong>
           </p>
           
           <div className="flex space-x-3">
@@ -2953,7 +3443,7 @@ const ReportGenerator = ({ tipo, datos, onClose }) => {
                   Generando...
                 </span>
               ) : (
-                '📄 Generar PDF'
+                `📄 Generar PDF ${empresa.nombre}`
               )}
             </button>
             
