@@ -528,7 +528,6 @@ const AdminPanel = () => {
         </div>
       </div>
     );
-};
   }
 
   return (
@@ -2545,8 +2544,6 @@ const ToolModal = ({ tool, onClose, onSave, categorias }) => {
           </div>
         </form>
       </div>
-    </div>
-  );
     </div>
   );
 };
