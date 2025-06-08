@@ -1,3 +1,4 @@
+// src/components/AdminPanel.js - VERSIÓN COMPLETA Y OPTIMIZADA
 const { useState, useEffect } = React;
 
 const AdminPanel = () => {
@@ -9,13 +10,24 @@ const AdminPanel = () => {
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [editingObra, setEditingObra] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
+    totalUsuarios: 0,
+    usuariosActivos: 0,
+    totalObras: 0,
+    obrasActivas: 0
+  });
 
   useEffect(() => {
     loadData();
+    // Actualizar estadísticas cada 30 segundos
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadData = async () => {
     try {
+      setError(null);
       const [usuariosRes, obrasRes, albanilesRes, jefesRes] = await Promise.all([
         fetch('/api/usuarios', {
           headers: {
@@ -44,12 +56,28 @@ const AdminPanel = () => {
       const albanilesData = await albanilesRes.json();
       const jefesData = await jefesRes.json();
 
-      if (usuariosRes.ok) setUsuarios(usuariosData);
-      if (obrasRes.ok) setObras(obrasData);
+      if (usuariosRes.ok) {
+        setUsuarios(usuariosData);
+        // Calcular estadísticas
+        setStats(prev => ({
+          ...prev,
+          totalUsuarios: usuariosData.length,
+          usuariosActivos: usuariosData.filter(u => u.activo).length
+        }));
+      }
+      if (obrasRes.ok) {
+        setObras(obrasData);
+        setStats(prev => ({
+          ...prev,
+          totalObras: obrasData.length,
+          obrasActivas: obrasData.filter(o => o.estado === 'en_progreso').length
+        }));
+      }
       if (albanilesRes.ok) setAlbaniles(albanilesData);
       if (jefesRes.ok) setJefesDeObra(jefesData);
     } catch (err) {
       console.error('Error al cargar datos:', err);
+      setError('Error al cargar datos del servidor');
     } finally {
       setLoading(false);
     }
@@ -63,6 +91,16 @@ const AdminPanel = () => {
       albanil: 'Albañil'
     };
     return roles[rol] || rol;
+  };
+
+  const getRoleIcon = (rol) => {
+    const icons = {
+      admin: '👑',
+      jefe_obra: '🛠️',
+      logistica: '🚚',
+      albanil: '👷'
+    };
+    return icons[rol] || '👤';
   };
 
   const getEstadoColor = (estado) => {
@@ -98,13 +136,13 @@ const AdminPanel = () => {
       
       if (response.ok) {
         loadData();
-        alert('Usuario desactivado exitosamente');
+        showNotification('Usuario desactivado exitosamente', 'success');
       } else {
         const error = await response.json();
-        alert(error.error || 'Error al desactivar usuario');
+        showNotification(error.error || 'Error al desactivar usuario', 'error');
       }
     } catch (err) {
-      alert('Error de conexión');
+      showNotification('Error de conexión', 'error');
     }
   };
 
@@ -112,208 +150,553 @@ const AdminPanel = () => {
     setEditingObra(obra);
   };
 
-  if (loading) {
+  const showNotification = (message, type = 'info') => {
+    // Toast notification
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg z-50 ${
+      type === 'success' ? 'bg-green-500 text-white' :
+      type === 'error' ? 'bg-red-500 text-white' :
+      'bg-blue-500 text-white'
+    }`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.remove();
+    }, 3000);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  const getTabIcon = (section) => {
+    const icons = {
+      usuarios: '👥',
+      obras: '🏗️',
+      'crear-obra': '➕',
+      tracking: '🗺️',
+      reportes: '📊'
+    };
+    return icons[section] || '📋';
+  };
+
+  if (loading && usuarios.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando panel de administración...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Navegación del panel */}
-      <div className="flex space-x-4 border-b border-gray-200">
-        <button
-          onClick={() => setActiveSection('usuarios')}
-          className={`py-2 px-4 font-medium ${
-            activeSection === 'usuarios'
-              ? 'border-b-2 border-blue-500 text-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          👥 Usuarios
-        </button>
-        <button
-          onClick={() => setActiveSection('obras')}
-          className={`py-2 px-4 font-medium ${
-            activeSection === 'obras'
-              ? 'border-b-2 border-blue-500 text-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          🏗️ Gestionar Obras
-        </button>
-        <button
-          onClick={() => setActiveSection('crear-obra')}
-          className={`py-2 px-4 font-medium ${
-            activeSection === 'crear-obra'
-              ? 'border-b-2 border-blue-500 text-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          ➕ Crear Obra
-        </button>
+      {/* Header con estadísticas */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg text-white p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold">Panel de Administración</h1>
+            <p className="text-blue-100">Gestión completa del sistema</p>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-blue-100">Última actualización</div>
+            <div className="text-lg font-medium">{new Date().toLocaleTimeString('es-ES')}</div>
+          </div>
+        </div>
+
+        {/* Estadísticas rápidas */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white bg-opacity-20 rounded-lg p-4">
+            <div className="text-2xl font-bold">{stats.usuariosActivos}</div>
+            <div className="text-sm text-blue-100">Usuarios Activos</div>
+            <div className="text-xs text-blue-200">de {stats.totalUsuarios} total</div>
+          </div>
+          <div className="bg-white bg-opacity-20 rounded-lg p-4">
+            <div className="text-2xl font-bold">{stats.obrasActivas}</div>
+            <div className="text-sm text-blue-100">Obras en Progreso</div>
+            <div className="text-xs text-blue-200">de {stats.totalObras} total</div>
+          </div>
+          <div className="bg-white bg-opacity-20 rounded-lg p-4">
+            <div className="text-2xl font-bold">{albaniles.length}</div>
+            <div className="text-sm text-blue-100">Albañiles</div>
+            <div className="text-xs text-blue-200">disponibles</div>
+          </div>
+          <div className="bg-white bg-opacity-20 rounded-lg p-4">
+            <div className="text-2xl font-bold">{jefesDeObra.length}</div>
+            <div className="text-sm text-blue-100">Jefes de Obra</div>
+            <div className="text-xs text-blue-200">supervisores</div>
+          </div>
+        </div>
       </div>
 
-      {/* Contenido del panel */}
-      {activeSection === 'usuarios' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">Gestión de Usuarios</h2>
-            <button
-              onClick={() => setShowCreateUser(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+      {/* Error display */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span className="text-red-700">{error}</span>
+            <button 
+              onClick={() => setError(null)}
+              className="ml-auto text-red-500 hover:text-red-700"
             >
-              + Crear Usuario
+              ✕
             </button>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Usuario
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Rol
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {usuarios.map(usuario => (
-                  <tr key={usuario.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {usuario.nombre} {usuario.apellido}
-                        </div>
-                        <div className="text-sm text-gray-500">{usuario.username}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {usuario.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {getRoleLabel(usuario.rol)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        usuario.activo
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {usuario.activo ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {usuario.activo && usuario.rol !== 'admin' && (
-                        <button
-                          onClick={() => desactivarUsuario(usuario.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Desactivar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
 
-      {activeSection === 'obras' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">Gestión de Obras</h2>
-            <div className="text-sm text-gray-600">
-              Total: {obras.length} obras
+      {/* Navegación del panel */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="flex flex-wrap border-b border-gray-200 bg-gray-50">
+          {[
+            { key: 'usuarios', label: 'Usuarios' },
+            { key: 'obras', label: 'Gestionar Obras' },
+            { key: 'crear-obra', label: 'Crear Obra' },
+            { key: 'tracking', label: 'Control de Agentes' },
+            { key: 'reportes', label: 'Reportes' }
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveSection(tab.key)}
+              className={`py-3 px-6 font-medium transition-all duration-200 flex items-center space-x-2 ${
+                activeSection === tab.key
+                  ? 'border-b-2 border-blue-500 text-blue-600 bg-white'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <span>{getTabIcon(tab.key)}</span>
+              <span>{tab.label}</span>
+              {tab.key === 'usuarios' && (
+                <span className="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-full">
+                  {stats.usuariosActivos}
+                </span>
+              )}
+              {tab.key === 'obras' && (
+                <span className="bg-green-100 text-green-600 text-xs px-2 py-1 rounded-full">
+                  {stats.obrasActivas}
+                </span>
+              )}
+              {tab.key === 'tracking' && (
+                <span className="bg-red-100 text-red-600 text-xs px-2 py-1 rounded-full animate-pulse">
+                  LIVE
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Contenido del panel */}
+        <div className="p-6">
+          {activeSection === 'usuarios' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Gestión de Usuarios</h2>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Administra usuarios, roles y permisos del sistema
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowCreateUser(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+                >
+                  <span>👤</span>
+                  <span>Crear Usuario</span>
+                </button>
+              </div>
+              
+              <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Usuario
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Email
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Rol
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Estado
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Última conexión
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {usuarios.map(usuario => (
+                        <tr key={usuario.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="text-2xl mr-3">{getRoleIcon(usuario.rol)}</div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {usuario.nombre} {usuario.apellido}
+                                </div>
+                                <div className="text-sm text-gray-500">@{usuario.username}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {usuario.email}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-3 py-1 text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                              {getRoleLabel(usuario.rol)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-3 py-1 text-xs leading-5 font-semibold rounded-full ${
+                              usuario.activo
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {usuario.activo ? '🟢 Activo' : '🔴 Inactivo'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(usuario.ultima_conexion)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => console.log('Ver perfil:', usuario.id)}
+                                className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
+                                title="Ver perfil"
+                              >
+                                👁️
+                              </button>
+                              {usuario.activo && usuario.rol !== 'admin' && (
+                                <button
+                                  onClick={() => desactivarUsuario(usuario.id)}
+                                  className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
+                                  title="Desactivar usuario"
+                                >
+                                  🚫
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {usuarios.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">👥</div>
+                    <p className="text-gray-500">No hay usuarios registrados</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {obras.map(obra => (
-              <div key={obra.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                <div className="p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">{obra.nombre}</h3>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getEstadoColor(obra.estado)}`}>
-                      {getEstadoLabel(obra.estado)}
-                    </span>
+          )}
+
+          {activeSection === 'obras' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Gestión de Obras</h2>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Administra todas las obras del sistema
+                  </p>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <div className="text-sm text-gray-600">
+                    Total: <span className="font-medium">{obras.length}</span> obras
                   </div>
-                  
-                  <div className="space-y-2 mb-4 text-sm">
-                    <p className="text-gray-600">
-                      <span className="font-medium">📍 Ubicación:</span> {obra.ubicacion}
-                    </p>
-                    <p className="text-gray-600">
-                      <span className="font-medium">👷 Albañil:</span> {obra.albanil_nombre} {obra.albanil_apellido}
-                    </p>
-                    {obra.jefe_nombre && (
-                      <p className="text-gray-600">
-                        <span className="font-medium">👨‍💼 Jefe:</span> {obra.jefe_nombre} {obra.jefe_apellido}
-                      </p>
-                    )}
-                  </div>
-                  
                   <button
-                    onClick={() => handleEditObra(obra)}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition duration-200"
+                    onClick={() => setActiveSection('crear-obra')}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                   >
-                    ✏️ Editar Obra
+                    ➕ Nueva Obra
                   </button>
                 </div>
               </div>
-            ))}
-            
-            {obras.length === 0 && (
-              <div className="col-span-full text-center py-12">
-                <p className="text-gray-500">No hay obras creadas aún</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {obras.map(obra => (
+                  <div key={obra.id} className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
+                    <div className="p-6">
+                      <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                          <span className="mr-2">🏗️</span>
+                          {obra.nombre}
+                        </h3>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getEstadoColor(obra.estado)}`}>
+                          {getEstadoLabel(obra.estado)}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-3 mb-6 text-sm">
+                        <div className="flex items-start">
+                          <span className="text-gray-500 mr-2">📍</span>
+                          <span className="text-gray-700">{obra.ubicacion}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <span className="text-gray-500 mr-2">👷</span>
+                          <span className="text-gray-700">
+                            {obra.albanil_nombre} {obra.albanil_apellido}
+                          </span>
+                        </div>
+                        {obra.jefe_nombre && (
+                          <div className="flex items-center">
+                            <span className="text-gray-500 mr-2">🛠️</span>
+                            <span className="text-gray-700">
+                              {obra.jefe_nombre} {obra.jefe_apellido}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center">
+                          <span className="text-gray-500 mr-2">📅</span>
+                          <span className="text-gray-700">
+                            Creada: {formatDate(obra.fecha_creacion)}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleEditObra(obra)}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                        >
+                          ✏️ Editar
+                        </button>
+                        <button
+                          onClick={() => console.log('Ver detalles:', obra.id)}
+                          className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                        >
+                          👁️ Ver
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {obras.length === 0 && (
+                  <div className="col-span-full text-center py-12">
+                    <div className="text-6xl mb-4">🏗️</div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No hay obras creadas</h3>
+                    <p className="text-gray-500 mb-4">Empieza creando tu primera obra</p>
+                    <button
+                      onClick={() => setActiveSection('crear-obra')}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
+                    >
+                      ➕ Crear Primera Obra
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
+          )}
 
-      {activeSection === 'crear-obra' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">Crear Nueva Obra</h2>
-          </div>
-          <CreateObraForm 
-            albaniles={albaniles} 
-            jefesDeObra={jefesDeObra}
-            onSuccess={loadData} 
-          />
+          {activeSection === 'crear-obra' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Crear Nueva Obra</h2>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Completa la información para crear una nueva obra
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveSection('obras')}
+                  className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded"
+                >
+                  ← Volver a obras
+                </button>
+              </div>
+              <CreateObraForm 
+                albaniles={albaniles} 
+                jefesDeObra={jefesDeObra}
+                onSuccess={() => {
+                  loadData();
+                  setActiveSection('obras');
+                  showNotification('Obra creada exitosamente', 'success');
+                }} 
+              />
+            </div>
+          )}
+
+          {activeSection === 'tracking' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                    🗺️ Control de Agentes
+                    <span className="ml-2 bg-red-100 text-red-600 text-xs px-2 py-1 rounded-full animate-pulse">
+                      EN VIVO
+                    </span>
+                  </h2>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Monitoreo en tiempo real de ubicaciones de empleados
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span>Sistema activo</span>
+                </div>
+              </div>
+
+              {/* Contenedor del mapa */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden" style={{ height: 'calc(100vh - 200px)' }}>
+                {window.AgentTrackingPanel ? (
+                  <AgentTrackingPanel adminId="admin_sistema" />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <div className="text-6xl mb-4">🗺️</div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">Panel de Control no disponible</h3>
+                      <p className="text-gray-500 mb-4">
+                        El componente AgentTrackingPanel no se ha cargado correctamente
+                      </p>
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                      >
+                        🔄 Recargar página
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'reportes' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Reportes y Análisis</h2>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Estadísticas y reportes del sistema
+                  </p>
+                </div>
+              </div>
+
+              {/* Reportes rápidos */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-medium text-gray-900">📊 Productividad</h3>
+                    <span className="text-2xl">📈</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Obras completadas</span>
+                      <span className="font-medium">{obras.filter(o => o.estado === 'completada').length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">En progreso</span>
+                      <span className="font-medium">{obras.filter(o => o.estado === 'en_progreso').length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Pendientes</span>
+                      <span className="font-medium">{obras.filter(o => o.estado === 'pendiente').length}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-medium text-gray-900">👥 Personal</h3>
+                    <span className="text-2xl">👷</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Albañiles activos</span>
+                      <span className="font-medium">{albaniles.filter(a => a.activo).length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Jefes de obra</span>
+                      <span className="font-medium">{jefesDeObra.filter(j => j.activo).length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total usuarios</span>
+                      <span className="font-medium">{usuarios.filter(u => u.activo).length}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-medium text-gray-900">🎯 Rendimiento</h3>
+                    <span className="text-2xl">⚡</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Tasa de finalización</span>
+                      <span className="font-medium">
+                        {obras.length > 0 ? Math.round((obras.filter(o => o.estado === 'completada').length / obras.length) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Obras activas</span>
+                      <span className="font-medium">{obras.filter(o => o.estado === 'en_progreso').length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Promedio por albañil</span>
+                      <span className="font-medium">
+                        {albaniles.length > 0 ? Math.round(obras.length / albaniles.length * 10) / 10 : 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de reportes detallados */}
+              <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+                <h3 className="font-medium text-gray-900 mb-4">📋 Reportes Detallados</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <button className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 p-4 rounded-lg text-left transition-colors">
+                    <div className="font-medium">📊 Reporte de Obras</div>
+                    <div className="text-sm text-blue-600 mt-1">Estado detallado de todas las obras</div>
+                  </button>
+                  <button className="bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 p-4 rounded-lg text-left transition-colors">
+                    <div className="font-medium">👥 Reporte de Personal</div>
+                    <div className="text-sm text-green-600 mt-1">Rendimiento y asignaciones</div>
+                  </button>
+                  <button className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 p-4 rounded-lg text-left transition-colors">
+                    <div className="font-medium">🗺️ Reporte de Ubicaciones</div>
+                    <div className="text-sm text-purple-600 mt-1">Tracking y geolocalización</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
       
-      {/* Modal crear usuario */}
+      {/* Modales */}
       {showCreateUser && (
         <CreateUserModal
           onClose={() => setShowCreateUser(false)}
           onSuccess={() => {
             setShowCreateUser(false);
             loadData();
+            showNotification('Usuario creado exitosamente', 'success');
           }}
         />
       )}
 
-      {/* Modal editar obra */}
       {editingObra && (
         <EditObraModal
           obra={editingObra}
@@ -323,6 +706,7 @@ const AdminPanel = () => {
           onSuccess={() => {
             setEditingObra(null);
             loadData();
+            showNotification('Obra actualizada exitosamente', 'success');
           }}
         />
       )}
@@ -330,6 +714,7 @@ const AdminPanel = () => {
   );
 };
 
+// Componentes auxiliares (CreateUserModal, CreateObraForm, EditObraModal)
 const CreateUserModal = ({ onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
     username: '',
@@ -357,7 +742,6 @@ const CreateUserModal = ({ onClose, onSuccess }) => {
 
       if (response.ok) {
         onSuccess();
-        alert('Usuario creado exitosamente');
       } else {
         const error = await response.json();
         alert(error.error || 'Error al crear usuario');
@@ -373,7 +757,7 @@ const CreateUserModal = ({ onClose, onSuccess }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-md w-full p-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Crear Nuevo Usuario</h3>
+          <h3 className="text-lg font-semibold">👤 Crear Nuevo Usuario</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             ✕
           </button>
@@ -383,7 +767,7 @@ const CreateUserModal = ({ onClose, onSuccess }) => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre
+                Nombre *
               </label>
               <input
                 type="text"
@@ -395,7 +779,7 @@ const CreateUserModal = ({ onClose, onSuccess }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Apellido
+                Apellido *
               </label>
               <input
                 type="text"
@@ -409,7 +793,7 @@ const CreateUserModal = ({ onClose, onSuccess }) => {
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Usuario
+              Usuario *
             </label>
             <input
               type="text"
@@ -422,7 +806,7 @@ const CreateUserModal = ({ onClose, onSuccess }) => {
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
+              Email *
             </label>
             <input
               type="email"
@@ -435,7 +819,7 @@ const CreateUserModal = ({ onClose, onSuccess }) => {
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Contraseña
+              Contraseña *
             </label>
             <input
               type="password"
@@ -449,17 +833,17 @@ const CreateUserModal = ({ onClose, onSuccess }) => {
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Rol
+              Rol *
             </label>
             <select
               value={formData.rol}
               onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="albanil">Albañil</option>
-              <option value="jefe_obra">Jefe de Obra</option>
-              <option value="logistica">Logística</option>
-              <option value="admin">Administrador</option>
+              <option value="albanil">👷 Albañil</option>
+              <option value="jefe_obra">🛠️ Jefe de Obra</option>
+              <option value="logistica">🚚 Logística</option>
+              <option value="admin">👑 Administrador</option>
             </select>
           </div>
           
@@ -535,7 +919,6 @@ const CreateObraForm = ({ albaniles, jefesDeObra, onSuccess }) => {
           latitud: null,
           longitud: null
         });
-        alert('Obra creada exitosamente');
         if (onSuccess) onSuccess();
       } else {
         const error = await response.json();
@@ -549,7 +932,7 @@ const CreateObraForm = ({ albaniles, jefesDeObra, onSuccess }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -607,7 +990,7 @@ const CreateObraForm = ({ albaniles, jefesDeObra, onSuccess }) => {
               <option value="">Seleccionar albañil</option>
               {albaniles.map(albanil => (
                 <option key={albanil.id} value={albanil.id}>
-                  {albanil.nombre} {albanil.apellido}
+                  👷 {albanil.nombre} {albanil.apellido}
                 </option>
               ))}
             </select>
@@ -625,7 +1008,7 @@ const CreateObraForm = ({ albaniles, jefesDeObra, onSuccess }) => {
               <option value="">Seleccionar jefe de obra</option>
               {jefesDeObra.map(jefe => (
                 <option key={jefe.id} value={jefe.id}>
-                  {jefe.nombre} {jefe.apellido}
+                  🛠️ {jefe.nombre} {jefe.apellido}
                 </option>
               ))}
             </select>
@@ -711,7 +1094,6 @@ const EditObraModal = ({ obra, albaniles, jefesDeObra, onClose, onSuccess }) => 
       });
 
       if (response.ok) {
-        alert('Obra actualizada exitosamente');
         onSuccess();
       } else {
         const error = await response.json();
@@ -794,7 +1176,7 @@ const EditObraModal = ({ obra, albaniles, jefesDeObra, onClose, onSuccess }) => 
                   <option value="">Seleccionar albañil</option>
                   {albaniles.map(albanil => (
                     <option key={albanil.id} value={albanil.id}>
-                      {albanil.nombre} {albanil.apellido}
+                      👷 {albanil.nombre} {albanil.apellido}
                     </option>
                   ))}
                 </select>
@@ -812,7 +1194,7 @@ const EditObraModal = ({ obra, albaniles, jefesDeObra, onClose, onSuccess }) => 
                   <option value="">Seleccionar jefe de obra</option>
                   {jefesDeObra.map(jefe => (
                     <option key={jefe.id} value={jefe.id}>
-                      {jefe.nombre} {jefe.apellido}
+                      🛠️ {jefe.nombre} {jefe.apellido}
                     </option>
                   ))}
                 </select>
@@ -827,13 +1209,8 @@ const EditObraModal = ({ obra, albaniles, jefesDeObra, onClose, onSuccess }) => 
                   <div>
                     <h4 className="text-yellow-800 font-medium">Cambio de Albañil Detectado</h4>
                     <p className="text-yellow-700 text-sm mt-1">
-                      Al cambiar el albañil asignado:
+                      Al cambiar el albañil asignado, la obra se transferirá al nuevo empleado
                     </p>
-                    <ul className="text-yellow-700 text-sm mt-2 list-disc list-inside">
-                      <li>La obra ya no aparecerá para el albañil anterior</li>
-                      <li>El nuevo albañil podrá ver y trabajar en esta obra</li>
-                      <li>Se mantendrá todo el historial de la obra</li>
-                    </ul>
                   </div>
                 </div>
               </div>
@@ -856,14 +1233,6 @@ const EditObraModal = ({ obra, albaniles, jefesDeObra, onClose, onSuccess }) => 
                 </div>
               )}
             </div>
-
-            {(!formData.latitud || !formData.longitud) && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-yellow-800 text-sm">
-                  ⚠️ Debes seleccionar una ubicación en el mapa
-                </p>
-              </div>
-            )}
             
             <div className="flex space-x-3 pt-4">
               <button
@@ -888,4 +1257,5 @@ const EditObraModal = ({ obra, albaniles, jefesDeObra, onClose, onSuccess }) => 
   );
 };
 
+// Hacer disponible globalmente
 window.AdminPanel = AdminPanel;
