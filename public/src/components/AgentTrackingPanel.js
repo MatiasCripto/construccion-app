@@ -1,4 +1,4 @@
-// src/components/AgentTrackingPanel.js - USUARIOS REALES de Firebase
+// src/components/AgentTrackingPanel.js - SIN CALLBACK PROBLEMÁTICO
 const { useState, useEffect, useRef } = React;
 
 const AgentTrackingPanel = ({ adminId }) => {
@@ -8,6 +8,7 @@ const AgentTrackingPanel = ({ adminId }) => {
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [onlineCount, setOnlineCount] = useState(0);
   const [mapReady, setMapReady] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Inicializando...');
   
   // Referencias
   const mapRef = useRef(null);
@@ -31,23 +32,50 @@ const AgentTrackingPanel = ({ adminId }) => {
     };
   };
 
-  // Inicializar Google Maps
-  const initializeGoogleMaps = () => {
-    if (!mapRef.current) {
-      console.error('❌ Contenedor del mapa no encontrado');
-      setTimeout(initializeGoogleMaps, 500);
-      return;
-    }
+  // Esperar Google Maps sin callback
+  const waitForGoogleMaps = () => {
+    return new Promise((resolve, reject) => {
+      // Si ya está cargado
+      if (window.google && window.google.maps) {
+        resolve();
+        return;
+      }
 
-    if (!window.google || !window.google.maps) {
-      console.error('❌ Google Maps no está cargado');
-      setTimeout(initializeGoogleMaps, 500);
-      return;
-    }
+      // Esperar hasta que se cargue
+      let attempts = 0;
+      const maxAttempts = 30; // 30 segundos máximo
+      
+      const checkInterval = setInterval(() => {
+        attempts++;
+        
+        if (window.google && window.google.maps) {
+          clearInterval(checkInterval);
+          resolve();
+        } else if (attempts >= maxAttempts) {
+          clearInterval(checkInterval);
+          reject(new Error('Google Maps no se cargó después de 30 segundos'));
+        }
+      }, 1000);
+    });
+  };
 
-    console.log('🗺️ Inicializando Google Maps...');
-
+  // Inicializar Google Maps SIN depender de callback
+  const initializeGoogleMaps = async () => {
     try {
+      setLoadingMessage('Esperando Google Maps...');
+      
+      // Verificar contenedor
+      if (!mapRef.current) {
+        console.error('❌ Contenedor del mapa no encontrado');
+        return;
+      }
+
+      // Esperar a que Google Maps esté disponible
+      await waitForGoogleMaps();
+      
+      setLoadingMessage('Inicializando mapa...');
+      console.log('🗺️ Inicializando Google Maps...');
+
       const mapOptions = {
         center: { lat: -34.6118, lng: -58.3960 }, // Buenos Aires por defecto
         zoom: 12,
@@ -71,10 +99,12 @@ const AgentTrackingPanel = ({ adminId }) => {
       console.log('✅ Google Maps inicializado correctamente');
       
       // Cargar usuarios reales después de que el mapa esté listo
-      loadRealUsers();
+      setLoadingMessage('Cargando usuarios...');
+      await loadRealUsers();
       
     } catch (error) {
       console.error('❌ Error inicializando Google Maps:', error);
+      setLoadingMessage('Error cargando Google Maps');
       setIsLoading(false);
     }
   };
@@ -174,7 +204,7 @@ const AgentTrackingPanel = ({ adminId }) => {
       setIsLoading(false);
       
       // Actualizar marcadores si el mapa está listo
-      if (mapReady) {
+      if (mapReady && mapInstance.current) {
         updateMarkersOnMap(usersWithValidLocation);
       }
       
@@ -291,19 +321,8 @@ const AgentTrackingPanel = ({ adminId }) => {
     console.log('🗺️ Inicializando Panel de Control de Agentes REALES...');
     
     const timer = setTimeout(() => {
-      if (mapRef.current) {
-        initializeGoogleMaps();
-      } else {
-        const interval = setInterval(() => {
-          if (mapRef.current) {
-            clearInterval(interval);
-            initializeGoogleMaps();
-          }
-        }, 1000);
-        
-        setTimeout(() => clearInterval(interval), 10000);
-      }
-    }, 100);
+      initializeGoogleMaps();
+    }, 500); // Dar tiempo para que el DOM esté listo
 
     return () => clearTimeout(timer);
   }, []);
@@ -332,13 +351,9 @@ const AgentTrackingPanel = ({ adminId }) => {
       <div className="flex items-center justify-center h-full bg-gray-50">
         <div className="text-center">
           <div className="text-6xl mb-4">🗺️</div>
-          <div className="text-xl font-semibold text-gray-700 mb-2">Cargando Control de Agentes</div>
-          <div className="text-gray-500">
-            Obteniendo usuarios reales de Firebase...
-          </div>
-          <div className="mt-4">
-            <div className="spinner w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin"></div>
-          </div>
+          <div className="text-xl font-semibold text-gray-700 mb-2">Control de Agentes</div>
+          <div className="text-gray-500 mb-4">{loadingMessage}</div>
+          <div className="spinner w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin"></div>
         </div>
       </div>
     );
@@ -355,7 +370,11 @@ const AgentTrackingPanel = ({ adminId }) => {
             Los empleados deben activar el tracking de ubicación desde sus dispositivos móviles.
           </div>
           <button 
-            onClick={loadRealUsers}
+            onClick={() => {
+              setIsLoading(true);
+              setLoadingMessage('Actualizando...');
+              loadRealUsers();
+            }}
             className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600"
           >
             🔄 Actualizar
@@ -387,7 +406,10 @@ const AgentTrackingPanel = ({ adminId }) => {
               EN VIVO
             </div>
             <button 
-              onClick={loadRealUsers}
+              onClick={() => {
+                setLoadingMessage('Actualizando usuarios...');
+                loadRealUsers();
+              }}
               className="bg-white text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
             >
               🔄 Actualizar
@@ -445,7 +467,7 @@ const AgentTrackingPanel = ({ adminId }) => {
           <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center">
             <div className="text-center">
               <div className="spinner w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin mb-4"></div>
-              <div className="text-gray-700 font-medium">Cargando Google Maps...</div>
+              <div className="text-gray-700 font-medium">{loadingMessage}</div>
             </div>
           </div>
         )}
@@ -454,12 +476,7 @@ const AgentTrackingPanel = ({ adminId }) => {
   );
 };
 
-// Función global para Google Maps callback
-window.initMap = function() {
-  console.log('✅ Google Maps API cargado via callback');
-  window.googleMapsLoaded = true;
-  window.dispatchEvent(new Event('googleMapsLoaded'));
-};
+// NO DEFINIR window.initMap - Esto causa el conflicto
 
 // Exportar componente
 window.AgentTrackingPanel = AgentTrackingPanel;
