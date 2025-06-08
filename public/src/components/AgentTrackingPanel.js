@@ -1,4 +1,4 @@
-// src/components/AgentTrackingPanel.js - SUPER ROBUSTO
+// src/components/AgentTrackingPanel.js - HÍBRIDO: Tu debug + Backend+Firebase
 const { useState, useEffect, useRef } = React;
 
 const AgentTrackingPanel = ({ adminId }) => {
@@ -27,9 +27,11 @@ const AgentTrackingPanel = ({ adminId }) => {
   const getRoleStyle = (role, isOnline) => {
     const styles = {
       admin: { color: '#8B5CF6', icon: '👑', name: 'Admin' },
+      administrador: { color: '#8B5CF6', icon: '👑', name: 'Administrador' },
       supervisor: { color: '#3B82F6', icon: '🛠️', name: 'Supervisor' },
       jefe_obra: { color: '#F59E0B', icon: '👨‍💼', name: 'Jefe de Obra' },
       albañil: { color: '#10B981', icon: '👷', name: 'Albañil' },
+      albanil: { color: '#10B981', icon: '👷', name: 'Albañil' },
       logistica: { color: '#EF4444', icon: '🚚', name: 'Logística' }
     };
     
@@ -133,9 +135,9 @@ const AgentTrackingPanel = ({ adminId }) => {
       setMapReady(true);
       addDebug('✅ Mapa OpenStreetMap inicializado exitosamente');
       
-      // Cargar usuarios
-      setLoadingMessage('Cargando usuarios...');
-      loadUsersFromFirebase();
+      // Cargar usuarios de AMBOS sistemas
+      setLoadingMessage('Cargando usuarios de todos los sistemas...');
+      loadUsersFromAllSources();
       
     } catch (error) {
       addDebug(`❌ Error inicializando mapa: ${error.message}`);
@@ -150,61 +152,110 @@ const AgentTrackingPanel = ({ adminId }) => {
     }
   };
 
-  // Cargar usuarios de Firebase
-  const loadUsersFromFirebase = async () => {
+  // ===== NUEVA FUNCIÓN: Cargar usuarios de TODOS los sistemas =====
+  const loadUsersFromAllSources = async () => {
     try {
-      addDebug('📥 Cargando usuarios de Firebase...');
-      
-      if (!window.db) {
-        throw new Error('Firebase no disponible');
+      addDebug('📥 Cargando usuarios de TODOS los sistemas...');
+      let allUsers = [];
+
+      // 1. BACKEND - Usuarios del AdminPanel
+      try {
+        addDebug('🔧 Cargando usuarios del backend (AdminPanel)...');
+        const backendResponse = await fetch('/api/usuarios', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        if (backendResponse.ok) {
+          const backendUsers = await backendResponse.json();
+          addDebug(`👥 Backend: ${backendUsers.length} usuarios encontrados`);
+          
+          // Convertir formato backend a formato del mapa
+          const convertedUsers = backendUsers.map(user => ({
+            id: `backend_${user.id}`,
+            name: `${user.nombre} ${user.apellido || ''}`.trim(),
+            email: user.email,
+            role: user.rol,
+            obra: user.obra || 'Sin obra asignada',
+            isOnline: user.activo || true,
+            lastSeen: new Date(),
+            source: 'backend',
+            // Ubicaciones distribuidas en Buenos Aires para testing
+            location: {
+              lat: -34.6118 + (Math.random() - 0.5) * 0.02,
+              lng: -58.3960 + (Math.random() - 0.5) * 0.02
+            }
+          }));
+          
+          allUsers = allUsers.concat(convertedUsers);
+          addDebug(`✅ ${convertedUsers.length} usuarios del backend procesados`);
+          
+        } else {
+          addDebug('⚠️ Error accediendo al backend API');
+        }
+      } catch (error) {
+        addDebug(`⚠️ Error cargando backend: ${error.message}`);
       }
 
-      const snapshot = await window.db.collection('usuarios').get();
-      addDebug(`📋 Firebase: ${snapshot.size} usuarios encontrados`);
-      
-      if (snapshot.empty) {
-        setRealUsers([]);
-        setOnlineCount(0);
-        setIsLoading(false);
-        addDebug('⚠️ No hay usuarios en Firebase');
-        return;
+      // 2. FIREBASE - Usuarios con ubicación real
+      try {
+        addDebug('🔥 Cargando usuarios de Firebase...');
+        if (window.db) {
+          const snapshot = await window.db.collection('usuarios').get();
+          addDebug(`📋 Firebase: ${snapshot.size} usuarios encontrados`);
+          
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            
+            // Solo agregar si no existe ya (evitar duplicados por email)
+            const existingUser = allUsers.find(u => u.email === data.email);
+            if (!existingUser) {
+              const user = {
+                id: `firebase_${doc.id}`,
+                name: data.nombre || data.name || 'Usuario sin nombre',
+                email: data.email || 'sin-email@construccion.com',
+                role: data.rol || data.role || 'albañil',
+                obra: data.obra || 'Sin obra asignada',
+                isOnline: true,
+                lastSeen: new Date(),
+                source: 'firebase',
+                // Ubicaciones distribuidas en Buenos Aires
+                location: data.location || {
+                  lat: -34.6118 + (Math.random() - 0.5) * 0.02,
+                  lng: -58.3960 + (Math.random() - 0.5) * 0.02
+                }
+              };
+              
+              allUsers.push(user);
+              addDebug(`👤 Usuario Firebase: ${user.name} (${user.role})`);
+            } else {
+              addDebug(`🔄 Usuario ya existe: ${data.nombre || data.name}`);
+            }
+          });
+          
+          addDebug(`✅ Usuarios Firebase procesados`);
+        } else {
+          addDebug('⚠️ Firebase no disponible');
+        }
+      } catch (error) {
+        addDebug(`⚠️ Error cargando Firebase: ${error.message}`);
       }
 
-      const users = [];
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        
-        const user = {
-          id: doc.id,
-          name: data.nombre || data.name || 'Usuario sin nombre',
-          email: data.email || 'sin-email@construccion.com',
-          role: data.rol || data.role || 'albañil',
-          obra: data.obra || 'Sin obra asignada',
-          // Ubicaciones distribuidas en Buenos Aires
-          location: {
-            lat: -34.6118 + (Math.random() - 0.5) * 0.02,
-            lng: -58.3960 + (Math.random() - 0.5) * 0.02
-          },
-          isOnline: true,
-          lastSeen: new Date(),
-          source: 'firebase'
-        };
-        
-        users.push(user);
-        addDebug(`👤 Usuario cargado: ${user.name} (${user.role})`);
-      });
+      // 3. Procesar resultados finales
+      addDebug(`📊 RESUMEN: ${allUsers.length} usuarios totales encontrados`);
+      addDebug(`🔧 Backend: ${allUsers.filter(u => u.source === 'backend').length}`);
+      addDebug(`🔥 Firebase: ${allUsers.filter(u => u.source === 'firebase').length}`);
 
-      setRealUsers(users);
-      window.realUsers = users; // Para debugging
-      setOnlineCount(users.filter(u => u.isOnline).length);
+      setRealUsers(allUsers);
+      window.realUsers = allUsers; // Para debugging
+      setOnlineCount(allUsers.filter(u => u.isOnline).length);
       setLastUpdate(new Date());
       setIsLoading(false);
       
-      addDebug(`✅ ${users.length} usuarios procesados correctamente`);
-      
       // Crear marcadores si el mapa está listo
       if (mapReady && mapInstance.current) {
-        createMarkers(users);
+        createMarkers(allUsers);
       }
       
     } catch (error) {
@@ -252,6 +303,23 @@ const AgentTrackingPanel = ({ adminId }) => {
           ">
             ${style.icon}
           </div>
+          <div style="
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: ${user.source === 'backend' ? '#3B82F6' : '#10B981'};
+            color: white;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            border: 2px solid white;
+          ">
+            ${user.source === 'backend' ? 'B' : 'F'}
+          </div>
         `,
         className: 'custom-marker',
         iconSize: [40, 40],
@@ -282,6 +350,11 @@ const AgentTrackingPanel = ({ adminId }) => {
               </span>
             </p>
             <p style="margin: 4px 0;"><strong>🕐 Última vez:</strong> ${user.lastSeen.toLocaleTimeString()}</p>
+            <p style="margin: 4px 0;"><strong>💾 Fuente:</strong> 
+              <span style="padding: 2px 6px; border-radius: 12px; background-color: ${user.source === 'backend' ? '#3B82F6' : '#10B981'}; color: white; font-size: 12px;">
+                ${user.source === 'backend' ? '🔧 Backend' : '🔥 Firebase'}
+              </span>
+            </p>
             <p style="margin: 4px 0;"><strong>📍 ID:</strong> ${user.id}</p>
           </div>
         </div>
@@ -342,7 +415,7 @@ const AgentTrackingPanel = ({ adminId }) => {
     if (!isLoading && mapReady) {
       const interval = setInterval(() => {
         addDebug('🔄 Actualizando usuarios automáticamente...');
-        loadUsersFromFirebase();
+        loadUsersFromAllSources();
       }, 30000); // Cada 30 segundos
 
       return () => clearInterval(interval);
@@ -405,7 +478,7 @@ const AgentTrackingPanel = ({ adminId }) => {
               EN VIVO
             </div>
             <button 
-              onClick={loadUsersFromFirebase}
+              onClick={loadUsersFromAllSources}
               className="bg-white text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
             >
               🔄 Actualizar
@@ -427,16 +500,19 @@ const AgentTrackingPanel = ({ adminId }) => {
           }}
         />
         
-        {/* Stats panel */}
+        {/* Stats panel MEJORADO */}
         <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 max-w-xs z-10">
-          <h3 className="font-semibold text-gray-800 mb-2">Estado</h3>
+          <h3 className="font-semibold text-gray-800 mb-2">Estado del Sistema</h3>
           <div className="space-y-1 text-sm">
             <p>📍 Contenedor: {mapRef.current ? '✅ OK' : '❌ NULL'}</p>
             <p>🗺️ Mapa: {mapReady ? '✅ Listo' : '⏳ Cargando'}</p>
             <p>🍃 Leaflet: {window.L ? '✅ OK' : '❌ No'}</p>
             <p>📊 Firebase: {window.db ? '✅ OK' : '❌ No'}</p>
-            <p>👥 Usuarios: {realUsers.length}</p>
+            <p>🔧 Backend: {localStorage.getItem('token') ? '✅ OK' : '❌ No token'}</p>
+            <p>👥 Total usuarios: {realUsers.length}</p>
             <p>📍 Marcadores: {Object.keys(markersRef.current).length}</p>
+            <p>🔧 Backend: {realUsers.filter(u => u.source === 'backend').length}</p>
+            <p>🔥 Firebase: {realUsers.filter(u => u.source === 'firebase').length}</p>
           </div>
           
           {/* Debug reciente */}
@@ -446,6 +522,21 @@ const AgentTrackingPanel = ({ adminId }) => {
               {debugInfo.slice(-3).map((info, index) => (
                 <div key={index} className="text-gray-600">{info}</div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Leyenda de fuentes */}
+        <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-3 z-10">
+          <h4 className="font-medium text-gray-800 mb-2 text-sm">Fuentes de Datos</h4>
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center">
+              <div className="w-4 h-4 bg-blue-500 rounded-full mr-2 flex items-center justify-center text-white text-xs font-bold">B</div>
+              <span>Backend/AdminPanel</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-4 h-4 bg-green-500 rounded-full mr-2 flex items-center justify-center text-white text-xs font-bold">F</div>
+              <span>Firebase Real-time</span>
             </div>
           </div>
         </div>
