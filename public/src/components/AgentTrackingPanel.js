@@ -1,4 +1,4 @@
-// src/components/AgentTrackingPanel.js - VERSIÓN SIMPLE SIN CONDICIONES
+// src/components/AgentTrackingPanel.js - FINAL FUNCIONAL
 const { useState, useEffect, useRef } = React;
 
 const AgentTrackingPanel = ({ adminId }) => {
@@ -9,6 +9,7 @@ const AgentTrackingPanel = ({ adminId }) => {
   const [onlineCount, setOnlineCount] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('Inicializando...');
+  const [error, setError] = useState(null);
   
   // Referencias
   const mapRef = useRef(null);
@@ -29,217 +30,337 @@ const AgentTrackingPanel = ({ adminId }) => {
     return { ...style, opacity: isOnline ? 1 : 0.5 };
   };
 
-  // Esperar Google Maps
-  const waitForGoogleMaps = () => {
+  // Cargar Leaflet dinámicamente
+  const loadLeaflet = () => {
     return new Promise((resolve, reject) => {
-      if (window.google && window.google.maps) {
+      if (window.L) {
         resolve();
         return;
       }
 
-      let attempts = 0;
-      const maxAttempts = 30;
+      console.log('📦 Cargando Leaflet...');
       
-      const checkInterval = setInterval(() => {
-        attempts++;
-        if (window.google && window.google.maps) {
-          clearInterval(checkInterval);
-          resolve();
-        } else if (attempts >= maxAttempts) {
-          clearInterval(checkInterval);
-          reject(new Error('Google Maps timeout'));
-        }
-      }, 1000);
+      // CSS de Leaflet
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+
+      // JavaScript de Leaflet
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.onload = () => {
+        console.log('✅ Leaflet cargado');
+        resolve();
+      };
+      script.onerror = () => reject(new Error('Error cargando Leaflet'));
+      document.head.appendChild(script);
     });
   };
 
-  // Inicializar mapa
+  // Inicializar mapa con OpenStreetMap
   const initializeMap = async () => {
     try {
-      console.log('🗺️ Iniciando inicialización del mapa...');
-      console.log('📍 mapRef.current:', mapRef.current);
+      console.log('🗺️ Inicializando mapa...');
+      setLoadingMessage('Cargando mapa...');
       
       if (!mapRef.current) {
-        console.error('❌ mapRef.current es null');
         throw new Error('Contenedor del mapa no disponible');
       }
 
-      console.log('⏳ Esperando Google Maps...');
-      await waitForGoogleMaps();
+      // Cargar Leaflet
+      await loadLeaflet();
       
-      console.log('🗺️ Creando instancia del mapa...');
-      const mapOptions = {
-        center: { lat: -34.6118, lng: -58.3960 },
-        zoom: 12,
-        mapTypeId: 'roadmap'
-      };
+      setLoadingMessage('Creando mapa...');
+      
+      // Crear mapa centrado en Buenos Aires
+      mapInstance.current = window.L.map(mapRef.current).setView([-34.6118, -58.3960], 12);
 
-      mapInstance.current = new window.google.maps.Map(mapRef.current, mapOptions);
+      // Agregar tiles de OpenStreetMap
+      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(mapInstance.current);
+
       setMapReady(true);
-      setIsLoading(false);
+      console.log('✅ Mapa OpenStreetMap inicializado');
       
-      console.log('✅ Mapa inicializado exitosamente');
-      
-      // Cargar usuarios
-      loadUsers();
+      // Cargar usuarios después de que el mapa esté listo
+      loadUsersFromFirebase();
       
     } catch (error) {
       console.error('❌ Error inicializando mapa:', error);
-      setLoadingMessage('Error: ' + error.message);
+      setError('Error inicializando mapa: ' + error.message);
+      setLoadingMessage('Error en mapa');
     }
   };
 
-  // Cargar usuarios REALES
-  const loadUsers = async () => {
+  // Cargar usuarios REALES de Firebase
+  const loadUsersFromFirebase = async () => {
     try {
       console.log('📥 Cargando usuarios de Firebase...');
+      setLoadingMessage('Cargando usuarios...');
       
       if (!window.db) {
-        console.error('❌ Firebase db no disponible');
-        setRealUsers([]);
-        return;
+        throw new Error('Firebase no disponible');
       }
 
-      // Obtener usuarios
-      const usersSnapshot = await window.db.collection('usuarios').get();
-      console.log(`👥 Snapshot recibido con ${usersSnapshot.size} documentos`);
+      // Obtener usuarios de Firebase
+      const snapshot = await window.db.collection('usuarios').get();
+      console.log(`📋 Firebase snapshot: ${snapshot.size} documentos`);
       
-      if (usersSnapshot.empty) {
-        console.log('⚠️ No hay usuarios en la colección "usuarios"');
+      if (snapshot.empty) {
+        console.log('⚠️ No hay usuarios en Firebase');
         setRealUsers([]);
+        setOnlineCount(0);
+        setIsLoading(false);
         return;
       }
 
       const users = [];
-      usersSnapshot.forEach(doc => {
-        const userData = doc.data();
-        console.log('👤 Usuario encontrado:', { id: doc.id, ...userData });
-        users.push({ id: doc.id, ...userData });
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        console.log(`👤 Usuario encontrado:`, { id: doc.id, ...data });
+        
+        // Procesar cada usuario
+        const user = {
+          id: doc.id,
+          name: data.nombre || data.name || 'Usuario sin nombre',
+          email: data.email || 'sin-email@construccion.com',
+          role: data.rol || data.role || 'albañil',
+          obra: data.obra || 'Sin obra asignada',
+          // Ubicación temporal para testing (en Buenos Aires)
+          location: {
+            lat: -34.6118 + (Math.random() - 0.5) * 0.02,
+            lng: -58.3960 + (Math.random() - 0.5) * 0.02
+          },
+          isOnline: true, // Por ahora todos online
+          lastSeen: new Date(),
+          source: 'firebase'
+        };
+        
+        users.push(user);
       });
 
-      console.log(`✅ ${users.length} usuarios cargados`);
+      console.log(`✅ ${users.length} usuarios procesados:`, users);
       
-      // Por ahora mostrar usuarios aunque no tengan ubicación
-      const processedUsers = users.map(user => ({
-        id: user.id,
-        name: user.nombre || user.name || 'Usuario sin nombre',
-        email: user.email || '',
-        role: user.rol || user.role || 'albañil',
-        location: { lat: -34.6118 + (Math.random() - 0.5) * 0.01, lng: -58.3960 + (Math.random() - 0.5) * 0.01 }, // Ubicación temporal
-        lastSeen: new Date(),
-        isOnline: true,
-        obra: user.obra || 'Sin obra asignada'
-      }));
-
-      setRealUsers(processedUsers);
-      setOnlineCount(processedUsers.length);
+      // Guardar usuarios en estado Y en ventana global para debug
+      setRealUsers(users);
+      window.realUsers = users; // Para debugging
+      setOnlineCount(users.filter(u => u.isOnline).length);
       setLastUpdate(new Date());
+      setIsLoading(false);
       
-      // Actualizar marcadores
-      if (mapReady && mapInstance.current) {
-        updateMarkers(processedUsers);
+      // Crear marcadores si el mapa está listo
+      if (mapReady && mapInstance.current && users.length > 0) {
+        createMarkers(users);
       }
       
     } catch (error) {
       console.error('❌ Error cargando usuarios:', error);
-      setRealUsers([]);
+      setError('Error cargando usuarios: ' + error.message);
+      setIsLoading(false);
     }
   };
 
-  // Actualizar marcadores
-  const updateMarkers = (userList) => {
-    if (!mapInstance.current || !mapReady) return;
+  // Crear marcadores en el mapa
+  const createMarkers = (users) => {
+    if (!mapInstance.current || !window.L) {
+      console.log('⏳ Mapa no listo para marcadores');
+      return;
+    }
 
-    console.log(`📍 Creando ${userList.length} marcadores...`);
+    console.log(`📍 Creando ${users.length} marcadores...`);
 
     // Limpiar marcadores anteriores
-    Object.values(markersRef.current).forEach(marker => marker.setMap(null));
+    Object.values(markersRef.current).forEach(marker => {
+      mapInstance.current.removeLayer(marker);
+    });
     markersRef.current = {};
 
-    // Crear nuevos marcadores
-    userList.forEach(user => {
+    // Crear grupo de marcadores para mejor rendimiento
+    const markersGroup = window.L.layerGroup().addTo(mapInstance.current);
+
+    users.forEach(user => {
       const style = getRoleStyle(user.role, user.isOnline);
       
-      const marker = new window.google.maps.Marker({
-        position: user.location,
-        map: mapInstance.current,
-        title: user.name,
-        icon: {
-          url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-            <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="20" cy="20" r="18" fill="${style.color}" stroke="white" stroke-width="3"/>
-              <text x="20" y="26" text-anchor="middle" fill="white" font-size="16" font-weight="bold">${style.icon}</text>
-            </svg>
-          `)}`,
-          scaledSize: new window.google.maps.Size(40, 40),
-          anchor: new window.google.maps.Point(20, 20)
-        }
+      // Crear marcador personalizado con DivIcon
+      const customIcon = window.L.divIcon({
+        html: `
+          <div style="
+            background-color: ${style.color};
+            color: white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: bold;
+            border: 3px solid white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            opacity: ${style.opacity};
+          ">
+            ${style.icon}
+          </div>
+        `,
+        className: 'custom-marker',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
       });
 
-      const infoContent = `
-        <div style="padding: 10px;">
-          <h3>${user.name}</h3>
-          <p>Rol: ${style.name}</p>
-          <p>Email: ${user.email}</p>
-          <p>Obra: ${user.obra}</p>
+      // Crear marcador
+      const marker = window.L.marker([user.location.lat, user.location.lng], {
+        icon: customIcon
+      });
+
+      // Popup con información del usuario
+      const popupContent = `
+        <div style="padding: 10px; min-width: 200px;">
+          <div style="display: flex; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 24px; margin-right: 8px;">${style.icon}</span>
+            <div>
+              <h3 style="margin: 0; font-size: 16px; font-weight: bold;">${user.name}</h3>
+              <p style="margin: 0; color: ${style.color}; font-size: 14px;">${style.name}</p>
+            </div>
+          </div>
+          <div style="font-size: 14px; line-height: 1.4;">
+            <p style="margin: 4px 0;"><strong>📧 Email:</strong> ${user.email}</p>
+            <p style="margin: 4px 0;"><strong>🏗️ Obra:</strong> ${user.obra}</p>
+            <p style="margin: 4px 0;"><strong>📊 Estado:</strong> 
+              <span style="color: ${user.isOnline ? '#10B981' : '#EF4444'};">
+                ${user.isOnline ? '🟢 En línea' : '🔴 Desconectado'}
+              </span>
+            </p>
+            <p style="margin: 4px 0;"><strong>🕐 Última vez:</strong> ${user.lastSeen.toLocaleTimeString()}</p>
+            <p style="margin: 4px 0;"><strong>📍 Coordenadas:</strong> ${user.location.lat.toFixed(4)}, ${user.location.lng.toFixed(4)}</p>
+          </div>
+          <div style="margin-top: 10px; display: flex; gap: 8px;">
+            <button onclick="alert('Contactar a ${user.name}')" style="background: #3B82F6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">📞 Contactar</button>
+            <button onclick="alert('Ver historial de ${user.name}')" style="background: #6B7280; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">📊 Historial</button>
+          </div>
         </div>
       `;
 
-      marker.addListener('click', () => {
-        const infoWindow = new window.google.maps.InfoWindow({ content: infoContent });
-        infoWindow.open(mapInstance.current, marker);
+      marker.bindPopup(popupContent, {
+        maxWidth: 300,
+        className: 'custom-popup'
       });
 
+      // Agregar al grupo y guardar referencia
+      markersGroup.addLayer(marker);
       markersRef.current[user.id] = marker;
     });
 
-    // Ajustar vista
-    if (userList.length > 0) {
-      const bounds = new window.google.maps.LatLngBounds();
-      userList.forEach(user => bounds.extend(user.location));
-      mapInstance.current.fitBounds(bounds);
+    // Ajustar vista para mostrar todos los marcadores
+    if (users.length > 0) {
+      const group = new window.L.featureGroup(Object.values(markersRef.current));
+      mapInstance.current.fitBounds(group.getBounds().pad(0.1));
+      
+      // Zoom mínimo para que no esté muy cerca
+      setTimeout(() => {
+        if (mapInstance.current.getZoom() > 15) {
+          mapInstance.current.setZoom(15);
+        }
+      }, 500);
     }
+
+    console.log(`✅ ${users.length} marcadores creados exitosamente`);
   };
 
-  // Effect principal
+  // Effect para inicializar
   useEffect(() => {
     console.log('🚀 AgentTrackingPanel montado');
     
-    // Esperar que el DOM esté listo
     const timer = setTimeout(() => {
-      console.log('⏰ Timer ejecutado, verificando mapRef...');
-      console.log('📍 mapRef.current en timer:', mapRef.current);
-      
       if (mapRef.current) {
-        console.log('✅ mapRef encontrado, inicializando...');
         initializeMap();
       } else {
-        console.log('❌ mapRef aún null, reintentando...');
-        // Reintentar cada segundo
-        const interval = setInterval(() => {
-          console.log('🔄 Reintentando... mapRef.current:', mapRef.current);
-          if (mapRef.current) {
-            clearInterval(interval);
-            initializeMap();
-          }
-        }, 1000);
-        
-        // Limpiar después de 30 segundos
-        setTimeout(() => clearInterval(interval), 30000);
+        setError('Contenedor del mapa no encontrado');
       }
     }, 1000);
 
     return () => clearTimeout(timer);
   }, []);
 
-  // Effect para marcadores cuando el mapa esté listo
+  // Effect para crear marcadores cuando el mapa y usuarios estén listos
   useEffect(() => {
     if (mapReady && realUsers.length > 0) {
-      updateMarkers(realUsers);
+      createMarkers(realUsers);
     }
   }, [mapReady, realUsers]);
 
-  // RENDERIZAR SIEMPRE EL MAPA (sin condiciones)
+  // Actualización periódica
+  useEffect(() => {
+    if (!isLoading) {
+      const interval = setInterval(() => {
+        console.log('🔄 Actualizando usuarios...');
+        loadUsersFromFirebase();
+      }, 30000); // Cada 30 segundos
+
+      return () => clearInterval(interval);
+    }
+  }, [isLoading]);
+
+  // Loading screen
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full bg-gray-50">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🗺️</div>
+          <div className="text-xl font-semibold text-gray-700 mb-2">Control de Agentes</div>
+          <div className="text-gray-500 mb-4">{loadingMessage}</div>
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin mb-4"></div>
+          {error && <div className="text-red-500 text-sm">{error}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  // Error screen
+  if (error && realUsers.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full bg-gray-50">
+        <div className="text-center">
+          <div className="text-6xl mb-4">❌</div>
+          <div className="text-xl font-semibold text-gray-700 mb-2">Error en Control de Agentes</div>
+          <div className="text-red-500 mb-4">{error}</div>
+          <button 
+            onClick={() => {
+              setError(null);
+              setIsLoading(true);
+              initializeMap();
+            }}
+            className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600"
+          >
+            🔄 Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // No users screen
+  if (realUsers.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full bg-gray-50">
+        <div className="text-center">
+          <div className="text-6xl mb-4">👥</div>
+          <div className="text-xl font-semibold text-gray-700 mb-2">No hay agentes</div>
+          <div className="text-gray-500 mb-4">No se encontraron usuarios con ubicación</div>
+          <button 
+            onClick={loadUsersFromFirebase}
+            className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600"
+          >
+            🔄 Actualizar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Main render
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
@@ -248,7 +369,7 @@ const AgentTrackingPanel = ({ adminId }) => {
           <div className="flex items-center space-x-3">
             <span className="text-2xl">🗺️</span>
             <div>
-              <h1 className="text-xl font-bold">Control de Agentes</h1>
+              <h1 className="text-xl font-bold">Control de Agentes en Tiempo Real</h1>
               <p className="text-blue-100 text-sm">
                 {realUsers.length} agentes • {onlineCount} en línea • {lastUpdate.toLocaleTimeString()}
               </p>
@@ -256,12 +377,13 @@ const AgentTrackingPanel = ({ adminId }) => {
           </div>
           
           <div className="flex items-center space-x-4">
-            <div className="bg-green-500 px-3 py-1 rounded-full text-sm font-medium">
-              {mapReady ? '🟢 EN VIVO' : '⏳ CARGANDO'}
+            <div className="bg-green-500 px-3 py-1 rounded-full text-sm font-medium flex items-center">
+              <div className="w-2 h-2 bg-white rounded-full mr-2 animate-pulse"></div>
+              EN VIVO
             </div>
             <button 
-              onClick={loadUsers}
-              className="bg-white text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50"
+              onClick={loadUsersFromFirebase}
+              className="bg-white text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
             >
               🔄 Actualizar
             </button>
@@ -269,50 +391,44 @@ const AgentTrackingPanel = ({ adminId }) => {
         </div>
       </div>
 
-      {/* MAPA - SIEMPRE RENDERIZADO */}
+      {/* Mapa */}
       <div className="flex-1 relative">
         <div 
           ref={mapRef}
           className="w-full h-full"
-          style={{ minHeight: '600px', backgroundColor: '#f0f0f0' }}
+          style={{ minHeight: '600px' }}
         />
         
-        {/* Stats overlay */}
-        <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4">
-          <h3 className="font-semibold text-gray-800 mb-2">Estado</h3>
+        {/* Stats panel */}
+        <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 max-w-xs z-10">
+          <h3 className="font-semibold text-gray-800 mb-2">Estado del Sistema</h3>
           <div className="space-y-1 text-sm">
-            <p>Contenedor: {mapRef.current ? '✅' : '❌'}</p>
-            <p>Google Maps: {window.google && window.google.maps ? '✅' : '❌'}</p>
-            <p>Mapa listo: {mapReady ? '✅' : '❌'}</p>
-            <p>Usuarios: {realUsers.length}</p>
+            <p>🗺️ Mapa: {mapReady ? '✅ Listo' : '⏳ Cargando'}</p>
+            <p>📊 Firebase: {window.db ? '✅ Conectado' : '❌ Error'}</p>
+            <p>👥 Usuarios: {realUsers.length}</p>
+            <p>🟢 En línea: {onlineCount}</p>
+            <p>🔴 Offline: {realUsers.length - onlineCount}</p>
+          </div>
+          
+          {/* Debug info */}
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <h4 className="font-medium text-gray-700 mb-1">Por rol:</h4>
+            <div className="text-xs space-y-1">
+              <p>👑 Admins: {realUsers.filter(u => u.role === 'admin').length}</p>
+              <p>🛠️ Supervisores: {realUsers.filter(u => u.role === 'supervisor').length}</p>
+              <p>👨‍💼 Jefes: {realUsers.filter(u => u.role === 'jefe_obra').length}</p>
+              <p>👷 Albañiles: {realUsers.filter(u => u.role === 'albañil').length}</p>
+              <p>🚚 Logística: {realUsers.filter(u => u.role === 'logistica').length}</p>
+            </div>
           </div>
         </div>
 
-        {/* Loading overlay */}
-        {isLoading && (
+        {/* Map loading overlay */}
+        {!mapReady && (
           <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center">
             <div className="text-center">
-              <div className="text-4xl mb-4">🗺️</div>
-              <div className="text-lg font-semibold mb-2">Cargando mapa...</div>
-              <div className="text-gray-500 mb-4">{loadingMessage}</div>
-              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin"></div>
-            </div>
-          </div>
-        )}
-
-        {/* No users message */}
-        {!isLoading && realUsers.length === 0 && (
-          <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-4xl mb-4">📍</div>
-              <div className="text-lg font-semibold mb-2">No hay usuarios</div>
-              <div className="text-gray-500 mb-4">No se encontraron usuarios en Firebase</div>
-              <button 
-                onClick={loadUsers}
-                className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600"
-              >
-                🔄 Reintentar
-              </button>
+              <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto animate-spin mb-4"></div>
+              <div className="text-gray-700 font-medium">{loadingMessage}</div>
             </div>
           </div>
         )}
