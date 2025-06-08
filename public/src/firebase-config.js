@@ -1,241 +1,325 @@
-// firebase-config.js - VERSIÓN CORREGIDA SIN ÍNDICES
-// Configuración Firebase
+// firebase-config.js - ARREGLADO
 const firebaseConfig = {
   apiKey: "AIzaSyDMIBS-LzegVdML_x37iPlA8gOqrs7Vkxk",
   authDomain: "construccion-pro-app.firebaseapp.com",
   projectId: "construccion-pro-app",
   storageBucket: "construccion-pro-app.firebasestorage.app",
-  messagingSenderId: "1022663683741",
-  appId: "1:1022663683741:web:32faecbc74e3f5895e6e74",
-  measurementId: "G-947R11NCW6"
+  messagingSenderId: "1024585462542",
+  appId: "1:1024585462542:web:f5f4e3a8d6c9b2a1"
 };
 
 // Inicializar Firebase
 firebase.initializeApp(firebaseConfig);
-
-// Servicios Firebase
 const db = firebase.firestore();
 const auth = firebase.auth();
-const analytics = firebase.analytics();
 
-// Configuración Cloudinary
-const cloudinaryConfig = {
-  cloudName: 'dt6uqdij7',
-  uploadPreset: 'construccion_preset'
-};
-
-// Funciones de Cloudinary
-const cloudinaryWidget = cloudinary.createUploadWidget(
-  {
-    cloudName: cloudinaryConfig.cloudName,
-    uploadPreset: cloudinaryConfig.uploadPreset,
-    folder: 'construccion-app',
-    multiple: false,
-    maxFiles: 1,
-    resourceType: 'image',
-    maxImageFileSize: 5000000, // 5MB
-    sources: ['local', 'camera'],
-    showAdvancedOptions: false,
-    cropping: false,
-    theme: 'minimal'
-  },
-  (error, result) => {
-    if (!error && result && result.event === "success") {
-      console.log('Foto subida:', result.info);
-      window.lastUploadedPhoto = result.info;
-      window.dispatchEvent(new CustomEvent('photoUploaded', {
-        detail: result.info
-      }));
-    }
-  }
-);
-
-// Funciones de utilidad CORREGIDAS
+// SERVICIO FIREBASE ARREGLADO
 const FirebaseService = {
-  // Autenticación
-  async signIn(email, password) {
+  // CREAR USUARIO DOCUMENT - ARREGLADO
+  async createUserDocument(userData) {
     try {
-      const result = await auth.signInWithEmailAndPassword(email, password);
-      return { success: true, user: result.user };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  },
-
-  async signUp(email, password, userData) {
-    try {
-      const result = await auth.createUserWithEmailAndPassword(email, password);
-      await this.createUserDocument(result.user.uid, userData);
-      return { success: true, user: result.user };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  },
-
-  async signOut() {
-    try {
-      await auth.signOut();
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Base de datos
-  async createUserDocument(uid, userData) {
-    return await db.collection('users').doc(uid).set({
-      ...userData,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  },
-
-  async createObra(obraData) {
-    return await db.collection('obras').add({
-      ...obraData,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  },
-
-  async updateObra(obraId, updates) {
-    return await db.collection('obras').doc(obraId).update({
-      ...updates,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  },
-
-  async getObras(userId = null, role = null) {
-    let query = db.collection('obras');
-    
-    if (role === 'albañil') {
-      query = query.where('albañilId', '==', userId);
-    } else if (role === 'cliente') {
-      query = query.where('clienteId', '==', userId);
-    }
-    
-    const snapshot = await query.get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  },
-
-  async addFotoToObra(obraId, fotoData) {
-    const obraRef = db.collection('obras').doc(obraId);
-    return await obraRef.update({
-      fotos: firebase.firestore.FieldValue.arrayUnion(fotoData),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  },
-
-  // ==================== MENSAJES CORREGIDOS ====================
-  
-  async addMensaje(obraId, mensaje) {
-    try {
-      console.log('🔥 Firebase: Guardando mensaje...', {
-        obraId,
-        tipo: mensaje.type,
-        usuario: mensaje.userName
-      });
+      console.log('🔥 Creando usuario en Firebase:', userData);
       
-      const docRef = await db.collection('mensajes').add({
-        obraId,
-        ...mensaje,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      // VALIDAR Y LIMPIAR DATOS
+      const cleanUserData = {
+        nombre: String(userData.nombre || '').trim(),
+        email: String(userData.email || '').trim().toLowerCase(),
+        rol: String(userData.rol || 'albañil').trim(),
+        obra: String(userData.obra || '').trim(),
+        fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
+        activo: true,
+        ultimaActividad: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      // GENERAR ID ÚNICO VÁLIDO
+      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      console.log('✅ Firebase: Mensaje guardado con ID:', docRef.id);
-      return docRef;
+      console.log('📝 Datos limpiados:', cleanUserData);
+      console.log('🆔 ID generado:', userId);
+
+      // CREAR DOCUMENTO EN FIRESTORE
+      const docRef = db.collection('usuarios').doc(userId);
+      await docRef.set(cleanUserData);
+      
+      console.log('✅ Usuario creado exitosamente con ID:', userId);
+      
+      return {
+        success: true,
+        userId: userId,
+        data: cleanUserData
+      };
       
     } catch (error) {
-      console.error('❌ Firebase: Error guardando mensaje:', error);
+      console.error('❌ Error creando usuario:', error);
       throw error;
     }
   },
 
-  // CORREGIDO: Sin orderBy para evitar índices
-  async getMensajes(obraId) {
+  // OBTENER TODOS LOS USUARIOS
+  async getAllUsers() {
     try {
-      console.log('🔥 Firebase: Obteniendo mensajes para obra:', obraId);
+      console.log('📥 Obteniendo todos los usuarios...');
       
-      const snapshot = await db.collection('mensajes')
-        .where('obraId', '==', obraId)
-        .get(); // ← SIN .orderBy() para evitar índice
+      const snapshot = await db.collection('usuarios').get();
+      const users = [];
       
-      const mensajes = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      }));
-      
-      // Ordenar en JavaScript en lugar de Firestore
-      mensajes.sort((a, b) => {
-        const timeA = a.timestamp?.toDate?.() || new Date(0);
-        const timeB = b.timestamp?.toDate?.() || new Date(0);
-        return timeA - timeB;
+      snapshot.forEach(doc => {
+        users.push({
+          id: doc.id,
+          ...doc.data()
+        });
       });
       
-      console.log('✅ Firebase: Mensajes obtenidos:', mensajes.length);
+      console.log(`✅ ${users.length} usuarios obtenidos`);
+      return users;
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo usuarios:', error);
+      throw error;
+    }
+  },
+
+  // ACTUALIZAR USUARIO
+  async updateUser(userId, updateData) {
+    try {
+      console.log('📝 Actualizando usuario:', userId, updateData);
+      
+      // LIMPIAR DATOS DE ACTUALIZACIÓN
+      const cleanUpdateData = {};
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] !== undefined && updateData[key] !== null) {
+          cleanUpdateData[key] = String(updateData[key]).trim();
+        }
+      });
+      
+      cleanUpdateData.ultimaActividad = firebase.firestore.FieldValue.serverTimestamp();
+      
+      await db.collection('usuarios').doc(String(userId)).update(cleanUpdateData);
+      
+      console.log('✅ Usuario actualizado:', userId);
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ Error actualizando usuario:', error);
+      throw error;
+    }
+  },
+
+  // ELIMINAR USUARIO
+  async deleteUser(userId) {
+    try {
+      console.log('🗑️ Eliminando usuario:', userId);
+      
+      await db.collection('usuarios').doc(String(userId)).delete();
+      
+      console.log('✅ Usuario eliminado:', userId);
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ Error eliminando usuario:', error);
+      throw error;
+    }
+  },
+
+  // CREAR OBRA
+  async createObra(obraData) {
+    try {
+      console.log('🏗️ Creando obra:', obraData);
+      
+      const cleanObraData = {
+        nombre: String(obraData.nombre || '').trim(),
+        descripcion: String(obraData.descripcion || '').trim(),
+        ubicacion: String(obraData.ubicacion || '').trim(),
+        fechaInicio: obraData.fechaInicio || null,
+        fechaCreacion: firebase.firestore.FieldValue.serverTimestamp(),
+        activa: true
+      };
+
+      const obraId = `obra_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      await db.collection('obras').doc(obraId).set(cleanObraData);
+      
+      console.log('✅ Obra creada:', obraId);
+      return { success: true, obraId: obraId };
+      
+    } catch (error) {
+      console.error('❌ Error creando obra:', error);
+      throw error;
+    }
+  },
+
+  // OBTENER OBRAS
+  async getObras() {
+    try {
+      const snapshot = await db.collection('obras').get();
+      const obras = [];
+      
+      snapshot.forEach(doc => {
+        obras.push({ id: doc.id, ...doc.data() });
+      });
+      
+      return obras;
+    } catch (error) {
+      console.error('❌ Error obteniendo obras:', error);
+      throw error;
+    }
+  },
+
+  // AGREGAR MENSAJE AL CHAT
+  async addMensaje(obraId, mensajeData) {
+    try {
+      console.log('💬 Agregando mensaje:', { obraId, mensajeData });
+      
+      const cleanMensajeData = {
+        userId: String(mensajeData.userId || '').trim(),
+        userName: String(mensajeData.userName || '').trim(),
+        userRole: String(mensajeData.userRole || '').trim(),
+        mensaje: String(mensajeData.mensaje || '').trim(),
+        tipo: String(mensajeData.tipo || 'texto').trim(),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        obraId: String(obraId).trim()
+      };
+
+      // Agregar campos específicos según el tipo
+      if (mensajeData.audioUrl) {
+        cleanMensajeData.audioUrl = String(mensajeData.audioUrl).trim();
+      }
+      if (mensajeData.duration) {
+        cleanMensajeData.duration = Number(mensajeData.duration) || 0;
+      }
+
+      const mensajeId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      await db.collection('mensajes').doc(mensajeId).set(cleanMensajeData);
+      
+      console.log('✅ Mensaje agregado:', mensajeId);
+      return { success: true, mensajeId: mensajeId };
+      
+    } catch (error) {
+      console.error('❌ Error agregando mensaje:', error);
+      throw error;
+    }
+  },
+
+  // OBTENER MENSAJES DE UNA OBRA
+  async getMensajes(obraId) {
+    try {
+      console.log('📥 Obteniendo mensajes para obra:', obraId);
+      
+      const snapshot = await db.collection('mensajes')
+        .where('obraId', '==', String(obraId))
+        .get();
+      
+      const mensajes = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        mensajes.push({
+          id: doc.id,
+          ...data,
+          timestamp: data.timestamp ? data.timestamp.toDate() : new Date()
+        });
+      });
+      
+      // Ordenar por timestamp
+      mensajes.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      
+      console.log(`✅ ${mensajes.length} mensajes obtenidos`);
       return mensajes;
       
     } catch (error) {
-      console.error('❌ Firebase: Error obteniendo mensajes:', error);
+      console.error('❌ Error obteniendo mensajes:', error);
       throw error;
     }
   },
 
-  // CORREGIDO: Listener en tiempo real sin orderBy
+  // LISTENER EN TIEMPO REAL PARA MENSAJES
   listenToMensajes(obraId, callback) {
-    try {
-      console.log('🔥 Firebase: Configurando listener para obra:', obraId);
-      
-      return db.collection('mensajes')
-        .where('obraId', '==', obraId)
-        .onSnapshot((snapshot) => {
-          try {
-            console.log('📨 Firebase: Cambios detectados en mensajes');
-            
-            // Procesar cambios y ordenar en JavaScript
-            const mensajes = snapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-            
-            // Ordenar por timestamp en JavaScript
-            mensajes.sort((a, b) => {
-              const timeA = a.timestamp?.toDate?.() || new Date(0);
-              const timeB = b.timestamp?.toDate?.() || new Date(0);
-              return timeA - timeB;
-            });
-            
-            // Crear snapshot simulado para mantener compatibilidad
-            const fakeSnapshot = {
-              docs: mensajes.map(msg => ({
-                id: msg.id,
-                data: () => msg
-              }))
-            };
-            
-            callback(fakeSnapshot);
-            
-          } catch (error) {
-            console.error('❌ Firebase: Error procesando cambios:', error);
-          }
-        }, (error) => {
-          console.error('❌ Firebase: Error en listener:', error);
-          throw error;
+    console.log('👂 Configurando listener para obra:', obraId);
+    
+    return db.collection('mensajes')
+      .where('obraId', '==', String(obraId))
+      .onSnapshot(snapshot => {
+        console.log('📨 Cambios detectados en mensajes');
+        
+        const mensajes = [];
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          mensajes.push({
+            id: doc.id,
+            ...data,
+            timestamp: data.timestamp ? data.timestamp.toDate() : new Date()
+          });
         });
         
+        // Ordenar por timestamp
+        mensajes.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+        
+        callback(mensajes);
+      }, error => {
+        console.error('❌ Error en listener de mensajes:', error);
+      });
+  },
+
+  // GUARDAR UBICACIÓN DE USUARIO
+  async saveUserLocation(userId, locationData) {
+    try {
+      console.log('📍 Guardando ubicación:', { userId, locationData });
+      
+      const cleanLocationData = {
+        userId: String(userId).trim(),
+        latitude: Number(locationData.latitude),
+        longitude: Number(locationData.longitude),
+        accuracy: Number(locationData.accuracy || 0),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        source: String(locationData.source || 'manual').trim()
+      };
+
+      const locationId = `loc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      await db.collection('user_locations').doc(locationId).set(cleanLocationData);
+      
+      console.log('✅ Ubicación guardada:', locationId);
+      return { success: true, locationId: locationId };
+      
     } catch (error) {
-      console.error('❌ Firebase: Error configurando listener:', error);
+      console.error('❌ Error guardando ubicación:', error);
       throw error;
+    }
+  },
+
+  // OBTENER ÚLTIMA UBICACIÓN DE USUARIO
+  async getUserLocation(userId) {
+    try {
+      const snapshot = await db.collection('user_locations')
+        .where('userId', '==', String(userId))
+        .orderBy('timestamp', 'desc')
+        .limit(1)
+        .get();
+
+      if (snapshot.empty) {
+        return null;
+      }
+
+      const doc = snapshot.docs[0];
+      const data = doc.data();
+      
+      return {
+        id: doc.id,
+        ...data,
+        timestamp: data.timestamp ? data.timestamp.toDate() : null
+      };
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo ubicación:', error);
+      return null;
     }
   }
 };
 
-// Función para subir foto con Cloudinary
-function uploadPhoto() {
-  cloudinaryWidget.open();
-}
-
-// Hacer disponibles globalmente
+// Exportar servicios globalmente
 window.FirebaseService = FirebaseService;
-window.uploadPhoto = uploadPhoto;
 window.db = db;
 window.auth = auth;
+window.firebase = firebase;
+
+console.log('✅ Firebase configurado correctamente con servicios arreglados');
