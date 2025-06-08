@@ -86,9 +86,7 @@ const Login = ({ onLogin }) => {
         </form>
         
         <div className="mt-6 text-center text-sm text-gray-300">
-          <p>Credenciales de prueba:</p>
-          <p><strong>Admin:</strong> admin / admin123</p>
-        </div>
+       </div>
       </div>
     </div>
   );
