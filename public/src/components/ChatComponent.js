@@ -1,7 +1,29 @@
-// src/components/ChatComponent.js - VERSIÓN COMPLETA Y OPTIMIZADA
+// src/components/ChatComponent.js - CON VALIDACIÓN DE DATOS
 const { useState, useEffect, useRef } = React;
 
 const ChatComponent = ({ obraId, userId, userName, userRole }) => {
+    // ==================== VALIDACIÓN INICIAL ====================
+    
+    // Generar datos por defecto si no se proporcionan
+    const validUserId = userId || `user_${Date.now()}`;
+    const validUserName = userName || 'Usuario Anónimo';
+    const validUserRole = userRole || 'albañil';
+    const validObraId = obraId || '1';
+
+    // Log para debugging
+    useEffect(() => {
+        console.log('🔍 ChatComponent Props:', {
+            originalUserId: userId,
+            originalUserName: userName,
+            originalUserRole: userRole,
+            originalObraId: obraId,
+            validUserId,
+            validUserName,
+            validUserRole,
+            validObraId
+        });
+    }, []);
+
     // Estados principales
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
@@ -14,35 +36,30 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [showAttachments, setShowAttachments] = useState(false);
     const [showAudioRecorder, setShowAudioRecorder] = useState(false);
-    const [isTyping, setIsTyping] = useState(false);
     
     // Referencias
     const messagesEndRef = useRef(null);
     const messageInputRef = useRef(null);
     const fileInputRef = useRef(null);
     const unsubscribeRef = useRef(null);
-    const retryTimeoutRef = useRef(null);
 
     // Configuración
     const quickEmojis = ['👍', '👎', '✅', '❌', '⚠️', '🔧', '🏗️', '📐', '🎯', '💡', '🔥', '⭐'];
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY = 2000;
 
     // ==================== EFECTOS ====================
     
     useEffect(() => {
-        if (obraId && window.FirebaseService) {
+        if (validObraId && window.FirebaseService) {
             initializeChat();
         } else {
-            setError('Firebase no está disponible. Recarga la página.');
+            setError('Firebase no está disponible o falta el ID de obra');
             setIsLoading(false);
         }
 
-        // Cleanup al desmontar
         return () => {
             cleanup();
         };
-    }, [obraId]);
+    }, [validObraId]);
 
     useEffect(() => {
         scrollToBottom();
@@ -55,20 +72,15 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
             setIsLoading(true);
             setError(null);
             
-            console.log('🚀 Inicializando chat para obra:', obraId);
+            console.log('🚀 Inicializando chat para obra:', validObraId);
             
-            // Cargar mensajes existentes
             await loadMessages();
-            
-            // Configurar tiempo real
             setupRealtimeListeners();
-            
             setIsConnected(true);
             
         } catch (err) {
             console.error('❌ Error inicializando chat:', err);
-            setError('Error conectando al chat. Reintentando...');
-            scheduleRetry();
+            setError('Error conectando al chat: ' + err.message);
         } finally {
             setIsLoading(false);
         }
@@ -78,9 +90,8 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
         try {
             console.log('📥 Cargando mensajes existentes...');
             
-            const mensajes = await window.FirebaseService.getMensajes(obraId);
+            const mensajes = await window.FirebaseService.getMensajes(validObraId);
             
-            // Convertir timestamps y ordenar
             const mensajesConvertidos = mensajes
                 .map(msg => ({
                     ...msg,
@@ -93,7 +104,9 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
             
         } catch (err) {
             console.error('❌ Error cargando mensajes:', err);
-            throw new Error('No se pudieron cargar los mensajes');
+            // No lanzar error, solo mostrar aviso
+            setError('No se pudieron cargar mensajes anteriores');
+            setMessages([]); // Empezar con chat vacío
         }
     };
 
@@ -101,13 +114,11 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
         try {
             console.log('🔥 Configurando listeners en tiempo real...');
             
-            // Cleanup listener anterior
             if (unsubscribeRef.current) {
                 unsubscribeRef.current();
             }
             
-            // Nuevo listener
-            unsubscribeRef.current = window.FirebaseService.listenToMensajes(obraId, (snapshot) => {
+            unsubscribeRef.current = window.FirebaseService.listenToMensajes(validObraId, (snapshot) => {
                 try {
                     console.log('📨 Actualización en tiempo real recibida');
                     
@@ -148,63 +159,54 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
             unsubscribeRef.current();
             unsubscribeRef.current = null;
         }
-        
-        if (retryTimeoutRef.current) {
-            clearTimeout(retryTimeoutRef.current);
-            retryTimeoutRef.current = null;
-        }
-    };
-
-    const scheduleRetry = () => {
-        if (retryTimeoutRef.current) {
-            clearTimeout(retryTimeoutRef.current);
-        }
-        
-        retryTimeoutRef.current = setTimeout(() => {
-            console.log('🔄 Reintentando conexión...');
-            initializeChat();
-        }, RETRY_DELAY);
     };
 
     // ==================== ENVÍO DE MENSAJES ====================
 
     const sendMessage = async (messageData) => {
-        if (!validateMessage(messageData) || !obraId) return;
+        if (!validateMessage(messageData) || !validObraId) return;
 
         try {
             setIsSending(true);
             setError(null);
             
+            // VALIDAR TODOS LOS CAMPOS REQUERIDOS
             const mensaje = {
-                userId,
-                userName,
-                userRole,
-                obraId,
-                timestamp: new Date(),
+                userId: validUserId,           // ✅ Siempre válido
+                userName: validUserName,       // ✅ Siempre válido  
+                userRole: validUserRole,       // ✅ Siempre válido
+                obraId: validObraId,          // ✅ Siempre válido
+                timestamp: new Date(),         // ✅ Siempre válido
                 ...messageData
             };
 
-            console.log('📤 Enviando mensaje:', {
+            // Log para debugging
+            console.log('📤 Enviando mensaje con datos:', {
+                userId: mensaje.userId,
+                userName: mensaje.userName,
+                userRole: mensaje.userRole,
+                obraId: mensaje.obraId,
                 tipo: mensaje.type,
-                usuario: mensaje.userName,
-                obra: obraId
+                tieneTimestamp: !!mensaje.timestamp
             });
             
+            // VERIFICAR QUE NO HAY CAMPOS UNDEFINED
+            for (const [key, value] of Object.entries(mensaje)) {
+                if (value === undefined) {
+                    throw new Error(`Campo ${key} es undefined - no se puede enviar`);
+                }
+            }
+
             // ENVÍO REAL A FIREBASE
-            await window.FirebaseService.addMensaje(obraId, mensaje);
+            await window.FirebaseService.addMensaje(validObraId, mensaje);
             console.log('✅ Mensaje enviado exitosamente');
             
-            // Limpiar input
             setNewMessage('');
-            
-            // Auto-scroll
             setTimeout(scrollToBottom, 100);
             
         } catch (err) {
             console.error('❌ Error enviando mensaje:', err);
             setError(`Error enviando mensaje: ${err.message}`);
-            
-            // Mostrar toast de error
             showErrorToast('No se pudo enviar el mensaje. Verifica tu conexión.');
             
         } finally {
@@ -234,8 +236,7 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
             message: `🎙️ Audio (${Math.floor(audioData.duration)}s)`,
             type: 'audio',
             audioUrl: audioData.url,
-            audioDuration: audioData.duration,
-            audioSize: audioData.size || 0
+            audioDuration: audioData.duration
         });
         
         setShowAudioRecorder(false);
@@ -245,8 +246,7 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Validar archivo
-        if (file.size > 10 * 1024 * 1024) { // 10MB
+        if (file.size > 10 * 1024 * 1024) {
             showErrorToast('El archivo es muy grande (máximo 10MB)');
             return;
         }
@@ -255,11 +255,10 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
             setIsLoading(true);
             console.log('📷 Subiendo archivo:', file.name);
             
-            // Subir a Cloudinary
             const formData = new FormData();
             formData.append('file', file);
             formData.append('upload_preset', 'construccion_preset');
-            formData.append('folder', `obra-${obraId}`);
+            formData.append('folder', `obra-${validObraId}`);
             
             const endpoint = file.type.startsWith('image/') 
                 ? 'https://api.cloudinary.com/v1_1/dt6uqdij7/image/upload'
@@ -284,8 +283,7 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                     type: fileType,
                     fileUrl: result.secure_url,
                     fileName: file.name,
-                    fileType: file.type,
-                    fileSize: file.size
+                    fileType: file.type
                 });
                 
                 console.log('✅ Archivo subido:', result.secure_url);
@@ -297,7 +295,7 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
         } finally {
             setIsLoading(false);
             setShowAttachments(false);
-            e.target.value = ''; // Limpiar input
+            e.target.value = '';
         }
     };
 
@@ -324,7 +322,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
     };
 
     const showErrorToast = (message) => {
-        // Simple toast notification
         const toast = document.createElement('div');
         toast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
         toast.textContent = message;
@@ -381,15 +378,14 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
     // ==================== RENDER MENSAJES ====================
 
     const renderMessage = (msg) => {
-        const isOwnMessage = msg.userId === userId;
+        const isOwnMessage = msg.userId === validUserId;
         
         return (
             <div
                 key={msg.id}
-                className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4 animate-fadeIn`}
+                className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4`}
             >
                 <div className={`max-w-xs lg:max-w-md ${isOwnMessage ? 'order-2' : 'order-1'}`}>
-                    {/* Header del mensaje */}
                     {!isOwnMessage && (
                         <div className="flex items-center mb-1">
                             <div className={`w-2 h-2 rounded-full mr-2 ${getUserColor(msg.userRole)}`}></div>
@@ -399,7 +395,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                         </div>
                     )}
                     
-                    {/* Contenido del mensaje */}
                     <div className={`rounded-lg px-4 py-2 shadow-sm ${
                         isOwnMessage 
                             ? 'bg-blue-500 text-white' 
@@ -416,11 +411,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                                     duration={msg.audioDuration}
                                     className={isOwnMessage ? 'bg-blue-400' : 'bg-gray-50'}
                                 />
-                                {msg.audioSize && (
-                                    <div className="text-xs opacity-75 mt-1">
-                                        {(msg.audioSize / 1024 / 1024).toFixed(1)}MB
-                                    </div>
-                                )}
                             </div>
                         )}
                         
@@ -443,11 +433,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                                         </svg>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium truncate">{msg.fileName}</p>
-                                            {msg.fileSize && (
-                                                <p className="text-xs opacity-75">
-                                                    {(msg.fileSize / 1024 / 1024).toFixed(1)}MB
-                                                </p>
-                                            )}
                                         </div>
                                         <button
                                             onClick={() => window.open(msg.fileUrl, '_blank')}
@@ -462,7 +447,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                         )}
                     </div>
                     
-                    {/* Timestamp */}
                     <div className={`text-xs text-gray-500 mt-1 ${
                         isOwnMessage ? 'text-right' : 'text-left'
                     }`}>
@@ -481,7 +465,9 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                 <div className="text-center">
                     <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-gray-600">🔥 Conectando con Firebase...</p>
-                    <p className="text-sm text-gray-500 mt-1">Cargando mensajes...</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Usuario: {validUserName} ({validUserRole})
+                    </p>
                 </div>
             </div>
         );
@@ -494,16 +480,15 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                 <div>
                     <h3 className="font-semibold text-gray-800 flex items-center">
                         💬 Chat de Obra
-                        {getUserBadge(userRole)}
                     </h3>
                     <p className="text-sm text-gray-600">
-                        {messages.length > 0 ? `${messages.length} mensaje(s)` : 'Sin mensajes'}
+                        {validUserName} • {validUserRole} • {messages.length} mensaje(s)
                     </p>
                 </div>
                 <div className="flex items-center space-x-2">
                     <div className={`w-2 h-2 rounded-full ${
                         isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-                    }`} title={isConnected ? 'Conectado en tiempo real' : 'Desconectado'}></div>
+                    }`}></div>
                     <span className="text-xs text-gray-500">
                         {isConnected ? 'En vivo' : 'Sin conexión'}
                     </span>
@@ -512,7 +497,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
 
             {/* ==================== MENSAJES ==================== */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {/* Error display */}
                 {error && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
                         <div className="flex items-center justify-between">
@@ -532,7 +516,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                     </div>
                 )}
 
-                {/* Empty state */}
                 {messages.length === 0 && !isLoading && (
                     <div className="text-center text-gray-500 py-12">
                         <div className="text-6xl mb-4">💬</div>
@@ -540,16 +523,14 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                         <p className="text-sm mb-4">No hay mensajes aún en esta obra</p>
                         <div className="bg-blue-50 rounded-lg p-4 max-w-md mx-auto">
                             <p className="text-sm text-blue-700">
-                                💡 Puedes enviar texto, fotos y audios. ¡Todo se sincroniza en tiempo real!
+                                💡 Como <strong>{validUserName}</strong>, puedes enviar texto, fotos y audios
                             </p>
                         </div>
                     </div>
                 )}
 
-                {/* Lista de mensajes */}
                 {messages.map(renderMessage)}
                 
-                {/* Indicador de envío */}
                 {isSending && (
                     <div className="flex justify-end mb-4">
                         <div className="bg-blue-100 border border-blue-200 rounded-lg px-4 py-2 max-w-xs">
@@ -561,7 +542,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                     </div>
                 )}
                 
-                {/* Auto-scroll target */}
                 <div ref={messagesEndRef} />
             </div>
 
@@ -591,7 +571,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
 
             {/* ==================== INPUT AREA ==================== */}
             <div className="bg-white border-t p-4 shadow-lg">
-                {/* Emoji picker */}
                 {showEmojiPicker && (
                     <div className="mb-3 p-3 bg-gray-50 rounded-lg border">
                         <div className="grid grid-cols-6 gap-2">
@@ -599,7 +578,7 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                                 <button
                                     key={index}
                                     onClick={() => handleEmojiSelect(emoji)}
-                                    className="text-2xl hover:bg-gray-200 rounded p-2 transition-colors touch-target"
+                                    className="text-2xl hover:bg-gray-200 rounded p-2 transition-colors"
                                 >
                                     {emoji}
                                 </button>
@@ -608,13 +587,12 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                     </div>
                 )}
 
-                {/* Attachments menu */}
                 {showAttachments && (
                     <div className="mb-3 p-3 bg-gray-50 rounded-lg border">
                         <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={() => setShowAudioRecorder(true)}
-                                className="flex items-center space-x-2 p-3 hover:bg-gray-200 rounded-lg transition-colors touch-target"
+                                className="flex items-center space-x-2 p-3 hover:bg-gray-200 rounded-lg transition-colors"
                             >
                                 <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
@@ -624,7 +602,7 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                             
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className="flex items-center space-x-2 p-3 hover:bg-gray-200 rounded-lg transition-colors touch-target"
+                                className="flex items-center space-x-2 p-3 hover:bg-gray-200 rounded-lg transition-colors"
                             >
                                 <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
@@ -635,12 +613,10 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                     </div>
                 )}
 
-                {/* Main input area */}
                 <div className="flex items-end space-x-2">
                     <button
                         onClick={() => setShowAttachments(!showAttachments)}
-                        className="p-2 text-gray-600 hover:text-gray-800 transition-colors touch-target"
-                        title="Adjuntar archivo"
+                        className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
                     >
                         <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a1 1 0 112 0v4a7 7 0 11-14 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z" clipRule="evenodd" />
@@ -663,8 +639,7 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
 
                     <button
                         onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        className="p-2 text-gray-600 hover:text-gray-800 transition-colors touch-target"
-                        title="Emojis"
+                        className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
                     >
                         <span className="text-xl">😊</span>
                     </button>
@@ -672,8 +647,7 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                     <button
                         onClick={handleSendText}
                         disabled={!newMessage.trim() || isSending}
-                        className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white p-3 rounded-lg transition-colors flex items-center space-x-1 touch-target"
-                        title="Enviar mensaje"
+                        className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white p-3 rounded-lg transition-colors flex items-center space-x-1"
                     >
                         {isSending ? (
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -685,7 +659,6 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                     </button>
                 </div>
 
-                {/* File input oculto */}
                 <input
                     ref={fileInputRef}
                     type="file"
@@ -694,35 +667,8 @@ const ChatComponent = ({ obraId, userId, userName, userRole }) => {
                     className="hidden"
                 />
             </div>
-
-            {/* Estilos CSS adicionales */}
-            <style jsx>{`
-                .animate-fadeIn {
-                    animation: fadeIn 0.3s ease-in;
-                }
-                
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                
-                .touch-target {
-                    min-width: 44px;
-                    min-height: 44px;
-                }
-                
-                .spinner {
-                    animation: spin 1s linear infinite;
-                }
-                
-                @keyframes spin {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-            `}</style>
         </div>
     );
 };
 
-// Hacer disponible globalmente
 window.ChatComponent = ChatComponent;
