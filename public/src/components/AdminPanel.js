@@ -9,7 +9,7 @@
 //   const [jefesDeObra, setJefesDeObra] = useState([]);
 //   const [loading, setLoading] = useState(true);
 //   const [error, setError] = useState(null);
-  
+
 //   // Estados para CRUD de usuarios
 //   const [showCreateUser, setShowCreateUser] = useState(false);
 //   const [showEditUser, setShowEditUser] = useState(false);
@@ -17,7 +17,7 @@
 //   const [selectedUser, setSelectedUser] = useState(null);
 //   const [userToDelete, setUserToDelete] = useState(null);
 //   const [isDeleting, setIsDeleting] = useState(false);
-  
+
 //   // Estados para CRUD de obras
 //   const [showCreateObra, setShowCreateObra] = useState(false);
 //   const [showEditObra, setShowEditObra] = useState(false);
@@ -25,7 +25,7 @@
 //   const [selectedObra, setSelectedObra] = useState(null);
 //   const [obraToDelete, setObraToDelete] = useState(null);
 //   const [isDeletingObra, setIsDeletingObra] = useState(false);
-  
+
 //   // Estados para nuevas funcionalidades
 //   const [materiales, setMateriales] = useState([]);
 //   const [herramientas, setHerramientas] = useState([]);
@@ -33,7 +33,7 @@
 //   const [showReportGenerator, setShowReportGenerator] = useState(false);
 //   const [reportType, setReportType] = useState('');
 //   const [reportData, setReportData] = useState({});
-  
+
 //   // Estados para gestión de materiales
 //   const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
 //   const [showEditMaterialModal, setShowEditMaterialModal] = useState(false);
@@ -41,7 +41,7 @@
 //   const [materialCategories, setMaterialCategories] = useState([]);
 //   const [materialSearch, setMaterialSearch] = useState('');
 //   const [materialCategoryFilter, setMaterialCategoryFilter] = useState('');
-  
+
 //   // Estados para gestión de herramientas
 //   const [showAddToolModal, setShowAddToolModal] = useState(false);
 //   const [showEditToolModal, setShowEditToolModal] = useState(false);
@@ -49,7 +49,7 @@
 //   const [toolCategories, setToolCategories] = useState([]);
 //   const [toolSearch, setToolSearch] = useState('');
 //   const [toolCategoryFilter, setToolCategoryFilter] = useState('');
-  
+
 //   // DATOS DE LA EMPRESA VIVEKA
 //   const empresaData = {
 //     nombre: 'LA EMPRESA....',
@@ -60,7 +60,7 @@
 //     eslogan: 'Construcción Profesional',
 //     website: 'Contacto: JOHNNY@gmail.com'
 //   };
-  
+
 //   const [stats, setStats] = useState({
 //     totalUsuarios: 0,
 //     usuariosActivos: 0,
@@ -150,11 +150,11 @@
 
 //   const confirmDeleteUser = async () => {
 //     if (!userToDelete) return;
-    
+
 //     setIsDeleting(true);
 //     try {
 //       console.log('🗑️ Eliminando usuario:', userToDelete.id);
-      
+
 //       const response = await fetch(`/api/usuarios/${userToDelete.id}`, {
 //         method: 'DELETE',
 //         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -179,7 +179,7 @@
 //         try {
 //           const messagesSnapshot = await window.db.collection('mensajes')
 //             .where('autorId', '==', userToDelete.id).get();
-          
+
 //           const deletePromises = [];
 //           messagesSnapshot.forEach(doc => {
 //             deletePromises.push(doc.ref.delete());
@@ -195,14 +195,14 @@
 //           console.warn('⚠️ Error eliminando usuario de Firebase:', firebaseError);
 //         }
 //       }
-      
+
 //       await loadData();
 //       setShowDeleteUserModal(false);
 //       setUserToDelete(null);
-      
+
 //       console.log('✅ Usuario eliminado completamente');
 //       showNotification('✅ Usuario eliminado completamente', 'success');
-      
+
 //     } catch (error) {
 //       console.error('❌ Error eliminando usuario:', error);
 //       showNotification('❌ Error eliminando usuario: ' + error.message, 'error');
@@ -234,11 +234,11 @@
 
 //   const confirmDeleteObra = async () => {
 //     if (!obraToDelete) return;
-    
+
 //     setIsDeletingObra(true);
 //     try {
 //       console.log('🗑️ Eliminando obra:', obraToDelete.id);
-      
+
 //       const response = await fetch(`/api/obras/${obraToDelete.id}`, {
 //         method: 'DELETE',
 //         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
@@ -255,7 +255,7 @@
 //           // Eliminar informes relacionados
 //           const informesSnapshot = await window.db.collection('informes_obra')
 //             .where('obra_id', '==', obraToDelete.id).get();
-          
+
 //           const deletePromises = [];
 //           informesSnapshot.forEach(doc => {
 //             deletePromises.push(doc.ref.delete());
@@ -265,24 +265,24 @@
 //           // Eliminar fotos relacionadas
 //           const fotosSnapshot = await window.db.collection('fotos_obra')
 //             .where('obra_id', '==', obraToDelete.id).get();
-          
+
 //           fotosSnapshot.forEach(doc => {
 //             deletePromises.push(doc.ref.delete());
 //           });
 //           await Promise.all(deletePromises);
-          
+
 //         } catch (firebaseError) {
 //           console.warn('⚠️ Error eliminando datos relacionados de Firebase:', firebaseError);
 //         }
 //       }
-      
+
 //       await loadData();
 //       setShowDeleteObraModal(false);
 //       setObraToDelete(null);
-      
+
 //       console.log('✅ Obra eliminada completamente');
 //       showNotification('✅ Obra eliminada completamente', 'success');
-      
+
 //     } catch (error) {
 //       console.error('❌ Error eliminando obra:', error);
 //       showNotification('❌ Error eliminando obra: ' + error.message, 'error');
@@ -307,7 +307,7 @@
 //         }));
 //         setMateriales(materialesData);
 //         setStats(prev => ({ ...prev, totalMateriales: materialesData.length }));
-        
+
 //         const categoriasUnicas = [...new Set(materialesData.map(m => m.categoria))].filter(Boolean);
 //         setMaterialCategories(categoriasUnicas);
 //       }
@@ -342,7 +342,7 @@
 //         }));
 //         setHerramientas(herramientasData);
 //         setStats(prev => ({ ...prev, totalHerramientas: herramientasData.length }));
-        
+
 //         const categoriasUnicas = [...new Set(herramientasData.map(h => h.categoria))].filter(Boolean);
 //         setToolCategories(categoriasUnicas);
 //       }
@@ -443,13 +443,13 @@
 
 //   const desactivarUsuario = async (userId) => {
 //     if (!confirm('¿Estás seguro de desactivar este usuario?')) return;
-    
+
 //     try {
 //       const response = await fetch(`/api/usuarios/${userId}/desactivar`, {
 //         method: 'PUT',
 //         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
 //       });
-      
+
 //       if (response.ok) {
 //         loadData();
 //         showNotification('Usuario desactivado exitosamente', 'success');
@@ -471,7 +471,7 @@
 //     }`;
 //     toast.textContent = message;
 //     document.body.appendChild(toast);
-    
+
 //     setTimeout(() => {
 //       toast.remove();
 //     }, 3000);
@@ -684,7 +684,7 @@
 //                   <span>Crear Usuario</span>
 //                 </button>
 //               </div>
-              
+
 //               <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
 //                 <div className="overflow-x-auto">
 //                   <table className="min-w-full divide-y divide-gray-200">
@@ -785,7 +785,7 @@
 //                     </tbody>
 //                   </table>
 //                 </div>
-                
+
 //                 {usuarios.length === 0 && (
 //                   <div className="text-center py-12">
 //                     <div className="text-6xl mb-4">👥</div>
@@ -825,7 +825,7 @@
 //                   </button>
 //                 </div>
 //               </div>
-              
+
 //               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 //                 {obras.map(obra => (
 //                   <div key={obra.id} className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
@@ -839,7 +839,7 @@
 //                           {getEstadoLabel(obra.estado)}
 //                         </span>
 //                       </div>
-                      
+
 //                       <div className="space-y-3 mb-6 text-sm">
 //                         <div className="flex items-start">
 //                           <span className="text-gray-500 mr-2">📍</span>
@@ -866,7 +866,7 @@
 //                           </span>
 //                         </div>
 //                       </div>
-                      
+
 //                       <div className="flex space-x-2">
 //                         <button
 //                           onClick={() => console.log('Ver detalles:', obra.id)}
@@ -890,7 +890,7 @@
 //                     </div>
 //                   </div>
 //                 ))}
-                
+
 //                 {obras.length === 0 && (
 //                   <div className="col-span-full text-center py-12">
 //                     <div className="text-6xl mb-4">🏗️</div>
@@ -1112,7 +1112,7 @@
 //                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 //                     />
 //                   </div>
-                  
+
 //                   <div>
 //                     <label className="block text-sm font-medium text-gray-700 mb-1">
 //                       📂 Filtrar por categoría
@@ -1128,7 +1128,7 @@
 //                       ))}
 //                     </select>
 //                   </div>
-                  
+
 //                   <div className="flex items-end">
 //                     <button
 //                       onClick={() => {
@@ -1154,7 +1154,7 @@
 //                     </div>
 //                   </div>
 //                 </div>
-                
+
 //                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
 //                   <div className="flex items-center">
 //                     <span className="text-2xl">✅</span>
@@ -1166,7 +1166,7 @@
 //                     </div>
 //                   </div>
 //                 </div>
-                
+
 //                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
 //                   <div className="flex items-center">
 //                     <span className="text-2xl">📂</span>
@@ -1176,7 +1176,7 @@
 //                     </div>
 //                   </div>
 //                 </div>
-                
+
 //                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
 //                   <div className="flex items-center">
 //                     <span className="text-2xl">🔍</span>
@@ -1271,7 +1271,7 @@
 //                     </tbody>
 //                   </table>
 //                 </div>
-                
+
 //                 {materialesFiltrados.length === 0 && (
 //                   <div className="text-center py-12">
 //                     <div className="text-6xl mb-4">🧱</div>
@@ -1329,7 +1329,7 @@
 //                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
 //                     />
 //                   </div>
-                  
+
 //                   <div>
 //                     <label className="block text-sm font-medium text-gray-700 mb-1">
 //                       📂 Filtrar por categoría
@@ -1345,7 +1345,7 @@
 //                       ))}
 //                     </select>
 //                   </div>
-                  
+
 //                   <div className="flex items-end">
 //                     <button
 //                       onClick={() => {
@@ -1371,7 +1371,7 @@
 //                     </div>
 //                   </div>
 //                 </div>
-                
+
 //                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
 //                   <div className="flex items-center">
 //                     <span className="text-2xl">✅</span>
@@ -1383,7 +1383,7 @@
 //                     </div>
 //                   </div>
 //                 </div>
-                
+
 //                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
 //                   <div className="flex items-center">
 //                     <span className="text-2xl">📂</span>
@@ -1393,7 +1393,7 @@
 //                     </div>
 //                   </div>
 //                 </div>
-                
+
 //                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
 //                   <div className="flex items-center">
 //                     <span className="text-2xl">🔍</span>
@@ -1496,7 +1496,7 @@
 //                     </tbody>
 //                   </table>
 //                 </div>
-                
+
 //                 {herramientasFiltradas.length === 0 && (
 //                   <div className="text-center py-12">
 //                     <div className="text-6xl mb-4">🔧</div>
@@ -1591,13 +1591,13 @@
 //                         )}
 //                       </div>
 //                     </div>
-                    
+
 //                     <div className="space-y-3 text-sm">
 //                       <div>
 //                         <strong>📋 Avance del día:</strong>
 //                         <p className="mt-1 text-gray-700">{informe.avance_descripcion}</p>
 //                       </div>
-                      
+
 //                       {informe.materiales_usados && informe.materiales_usados.length > 0 && (
 //                         <div>
 //                           <strong>🧱 Materiales utilizados:</strong>
@@ -1608,7 +1608,7 @@
 //                           </ul>
 //                         </div>
 //                       )}
-                      
+
 //                       {informe.personal_presente && informe.personal_presente.length > 0 && (
 //                         <div>
 //                           <strong>👷 Personal presente:</strong>
@@ -1617,14 +1617,14 @@
 //                           </p>
 //                         </div>
 //                       )}
-                      
+
 //                       {informe.observaciones && (
 //                         <div>
 //                           <strong>📝 Observaciones:</strong>
 //                           <p className="mt-1 text-gray-700">{informe.observaciones}</p>
 //                         </div>
 //                       )}
-                      
+
 //                       {informe.porcentaje_avance && (
 //                         <div>
 //                           <strong>📊 Progreso total:</strong>
@@ -1642,7 +1642,7 @@
 //                     </div>
 //                   </div>
 //                 ))}
-                
+
 //                 {informesObra.length === 0 && (
 //                   <div className="text-center py-12">
 //                     <div className="text-6xl mb-4">📋</div>
@@ -1861,9 +1861,9 @@
 
 //         </div>
 //       </div>
-      
+
 //       {/* TODOS LOS MODALES CRUD */}
-      
+
 //       {/* Modal crear usuario */}
 //       {showCreateUser && (
 //         <CreateUserModal
@@ -1916,7 +1916,7 @@
 //                 </p>
 //               </div>
 //             </div>
-            
+
 //             <div className="flex space-x-3">
 //               <button
 //                 onClick={confirmDeleteUser}
@@ -1993,7 +1993,7 @@
 //                 </p>
 //               </div>
 //             </div>
-            
+
 //             <div className="flex space-x-3">
 //               <button
 //                 onClick={confirmDeleteObra}
@@ -2032,7 +2032,7 @@
 //           categorias={materialCategories}
 //         />
 //       )}
-      
+
 //       {showEditMaterialModal && selectedMaterial && (
 //         <MaterialModal
 //           material={selectedMaterial}
@@ -2053,7 +2053,7 @@
 //           categorias={toolCategories}
 //         />
 //       )}
-      
+
 //       {showEditToolModal && selectedTool && (
 //         <ToolModal
 //           tool={selectedTool}
@@ -2285,7 +2285,7 @@
 //               placeholder="Ej: Proveedor ABC S.A."
 //             />
 //           </div>
-          
+
 //           <div className="flex space-x-3 pt-4">
 //             <button
 //               type="button"
@@ -2525,7 +2525,7 @@
 //               rows="2"
 //             />
 //           </div>
-          
+
 //           <div className="flex space-x-3 pt-4">
 //             <button
 //               type="button"
@@ -2579,7 +2579,7 @@
 
 //       if (response.ok) {
 //         const backendUser = await response.json();
-        
+
 //         // 2. CREAR EN FIREBASE (NUEVO - SINCRONIZACIÓN)
 //         if (window.FirebaseService && window.db) {
 //           try {
@@ -2599,7 +2599,7 @@
 //             console.warn('⚠️ Error sincronizando con Firebase:', firebaseError);
 //           }
 //         }
-        
+
 //         onSuccess();
 //       } else {
 //         const error = await response.json();
@@ -2621,7 +2621,7 @@
 //             ✕
 //           </button>
 //         </div>
-        
+
 //         <form onSubmit={handleSubmit} className="space-y-4">
 //           <div className="grid grid-cols-2 gap-4">
 //             <div>
@@ -2649,7 +2649,7 @@
 //               />
 //             </div>
 //           </div>
-          
+
 //           <div>
 //             <label className="block text-sm font-medium text-gray-700 mb-1">
 //               Usuario *
@@ -2662,7 +2662,7 @@
 //               required
 //             />
 //           </div>
-          
+
 //           <div>
 //             <label className="block text-sm font-medium text-gray-700 mb-1">
 //               Email *
@@ -2675,7 +2675,7 @@
 //               required
 //             />
 //           </div>
-          
+
 //           <div>
 //             <label className="block text-sm font-medium text-gray-700 mb-1">
 //               Contraseña *
@@ -2689,7 +2689,7 @@
 //               minLength="6"
 //             />
 //           </div>
-          
+
 //           <div>
 //             <label className="block text-sm font-medium text-gray-700 mb-1">
 //               Rol *
@@ -2705,7 +2705,7 @@
 //               <option value="admin">👑 Administrador</option>
 //             </select>
 //           </div>
-          
+
 //           <div className="flex space-x-3 pt-4">
 //             <button
 //               type="button"
@@ -2760,7 +2760,7 @@
 //           try {
 //             const firebaseSnapshot = await window.db.collection('usuarios')
 //               .where('backendId', '==', user.id).get();
-            
+
 //             if (!firebaseSnapshot.empty) {
 //               const firebaseDoc = firebaseSnapshot.docs[0];
 //               await firebaseDoc.ref.update({
@@ -2778,7 +2778,7 @@
 //             console.warn('⚠️ Error actualizando Firebase:', firebaseError);
 //           }
 //         }
-        
+
 //         onSuccess();
 //       } else {
 //         const error = await response.json();
@@ -2800,7 +2800,7 @@
 //             ✕
 //           </button>
 //         </div>
-        
+
 //         <form onSubmit={handleSubmit} className="space-y-4">
 //           <div className="grid grid-cols-2 gap-4">
 //             <div>
@@ -2828,7 +2828,7 @@
 //               />
 //             </div>
 //           </div>
-          
+
 //           <div>
 //             <label className="block text-sm font-medium text-gray-700 mb-1">
 //               Usuario *
@@ -2841,7 +2841,7 @@
 //               required
 //             />
 //           </div>
-          
+
 //           <div>
 //             <label className="block text-sm font-medium text-gray-700 mb-1">
 //               Email *
@@ -2854,7 +2854,7 @@
 //               required
 //             />
 //           </div>
-          
+
 //           <div>
 //             <label className="block text-sm font-medium text-gray-700 mb-1">
 //               Rol *
@@ -2884,7 +2884,7 @@
 //               <option value="false">🔴 Inactivo</option>
 //             </select>
 //           </div>
-          
+
 //           <div className="flex space-x-3 pt-4">
 //             <button
 //               type="button"
@@ -2930,12 +2930,12 @@
 
 //   const handleSubmit = async (e) => {
 //     e.preventDefault();
-    
+
 //     if (!formData.latitud || !formData.longitud) {
 //       alert('Por favor selecciona una ubicación en el mapa');
 //       return;
 //     }
-    
+
 //     setLoading(true);
 
 //     try {
@@ -2981,7 +2981,7 @@
 //             </button>
 //           </div>
 //         </div>
-        
+
 //         <div className="p-6">
 //           <form onSubmit={handleSubmit} className="space-y-6">
 //             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2997,7 +2997,7 @@
 //                   required
 //                 />
 //               </div>
-              
+
 //               <div>
 //                 <label className="block text-sm font-medium text-gray-700 mb-1">
 //                   Descripción de Ubicación *
@@ -3012,7 +3012,7 @@
 //                 />
 //               </div>
 //             </div>
-            
+
 //             <div>
 //               <label className="block text-sm font-medium text-gray-700 mb-1">
 //                 Descripción del Trabajo
@@ -3025,7 +3025,7 @@
 //                 placeholder="Describe el trabajo a realizar..."
 //               />
 //             </div>
-            
+
 //             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 //               <div>
 //                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3045,7 +3045,7 @@
 //                   ))}
 //                 </select>
 //               </div>
-              
+
 //               <div>
 //                 <label className="block text-sm font-medium text-gray-700 mb-1">
 //                   Jefe de Obra
@@ -3090,7 +3090,7 @@
 //                 </p>
 //               </div>
 //             )}
-            
+
 //             <div className="flex space-x-3 pt-4">
 //               <button
 //                 type="button"
@@ -3138,12 +3138,12 @@
 
 //   const handleSubmit = async (e) => {
 //     e.preventDefault();
-    
+
 //     if (!formData.latitud || !formData.longitud) {
 //       alert('Por favor selecciona una ubicación en el mapa');
 //       return;
 //     }
-    
+
 //     setLoading(true);
 
 //     try {
@@ -3180,7 +3180,7 @@
 //             </button>
 //           </div>
 //         </div>
-        
+
 //         <div className="p-6">
 //           <form onSubmit={handleSubmit} className="space-y-6">
 //             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3196,7 +3196,7 @@
 //                   required
 //                 />
 //               </div>
-              
+
 //               <div>
 //                 <label className="block text-sm font-medium text-gray-700 mb-1">
 //                   Estado *
@@ -3227,7 +3227,7 @@
 //                 required
 //               />
 //             </div>
-            
+
 //             <div>
 //               <label className="block text-sm font-medium text-gray-700 mb-1">
 //                 Descripción del Trabajo
@@ -3240,7 +3240,7 @@
 //                 placeholder="Describe el trabajo a realizar..."
 //               />
 //             </div>
-            
+
 //             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 //               <div>
 //                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3260,7 +3260,7 @@
 //                   ))}
 //                 </select>
 //               </div>
-              
+
 //               <div>
 //                 <label className="block text-sm font-medium text-gray-700 mb-1">
 //                   Jefe de Obra
@@ -3312,7 +3312,7 @@
 //                 </div>
 //               )}
 //             </div>
-            
+
 //             <div className="flex space-x-3 pt-4">
 //               <button
 //                 type="button"
@@ -3342,16 +3342,16 @@
 
 //   const generatePDF = async () => {
 //     setIsGenerating(true);
-    
+
 //     try {
 //       // Simular generación de PDF con datos de VIVEKA
 //       await new Promise(resolve => setTimeout(resolve, 2000));
-      
+
 //       const fileName = `${empresa.nombre}_${tipo}_${new Date().toISOString().split('T')[0]}.pdf`;
 //       console.log('📄 PDF generado para VIVEKA:', fileName);
 //       console.log('🏗️ Empresa:', empresa);
 //       console.log('📊 Datos:', datos);
-      
+
 //       // Crear contenido del PDF con datos de empresa
 //       const pdfContent = `
 // 📄 REPORTE ${tipo.toUpperCase()} - ${empresa.nombre}
@@ -3366,11 +3366,11 @@
 
 // 📅 GENERADO: ${new Date().toLocaleString('es-ES')}
 // `;
-      
+
 //       // Simular descarga
 //       const blob = new Blob([pdfContent], { type: 'text/plain' });
 //       const url = URL.createObjectURL(blob);
-      
+
 //       const link = document.createElement('a');
 //       link.href = url;
 //       link.download = fileName;
@@ -3378,9 +3378,9 @@
 //       link.click();
 //       document.body.removeChild(link);
 //       URL.revokeObjectURL(url);
-      
+
 //       alert(`✅ PDF de ${empresa.nombre} generado exitosamente`);
-      
+
 //     } catch (error) {
 //       console.error('❌ Error generando PDF:', error);
 //       alert('❌ Error al generar PDF');
@@ -3410,7 +3410,7 @@
 //           <div className="text-4xl mb-4">🏗️</div>
 //           <h3 className="text-lg font-semibold mb-2">{empresa.nombre}</h3>
 //           <h4 className="text-md font-medium mb-4">📄 Generar Reporte PDF</h4>
-          
+
 //           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
 //             <div className="text-sm text-blue-800">
 //               <p><strong>Tipo:</strong> {getTipoLabel(tipo)}</p>
@@ -3423,7 +3423,7 @@
 //           <p className="text-gray-600 mb-6">
 //             Se generará un reporte profesional con el logo y datos de <strong>{empresa.nombre}</strong>
 //           </p>
-          
+
 //           <div className="flex space-x-3">
 //             <button
 //               onClick={generatePDF}
@@ -3443,7 +3443,7 @@
 //                 `📄 Generar PDF ${empresa.nombre}`
 //               )}
 //             </button>
-            
+
 //             <button
 //               onClick={onClose}
 //               className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -3470,14 +3470,14 @@ const AdminPanel = () => {
   const [jefesDeObra, setJefesDeObra] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   // Estados para nuevas funcionalidades
   const [materiales, setMateriales] = useState([]);
   const [herramientas, setHerramientas] = useState([]);
   const [informesObra, setInformesObra] = useState([]);
   const [materialCategories, setMaterialCategories] = useState([]);
   const [toolCategories, setToolCategories] = useState([]);
-  
+
   // DATOS DE LA EMPRESA VIVEKA
   const empresaData = {
     nombre: 'VIVEKA',
@@ -3488,7 +3488,7 @@ const AdminPanel = () => {
     eslogan: 'Construcción Profesional',
     website: 'Contacto: vivekaemuna@gmail.com'
   };
-  
+
   const [stats, setStats] = useState({
     totalUsuarios: 0,
     usuariosActivos: 0,
@@ -3570,7 +3570,7 @@ const AdminPanel = () => {
         }));
         setMateriales(materialesData);
         setStats(prev => ({ ...prev, totalMateriales: materialesData.length }));
-        
+
         const categoriasUnicas = [...new Set(materialesData.map(m => m.categoria))].filter(Boolean);
         setMaterialCategories(categoriasUnicas);
       }
@@ -3589,7 +3589,7 @@ const AdminPanel = () => {
         }));
         setHerramientas(herramientasData);
         setStats(prev => ({ ...prev, totalHerramientas: herramientasData.length }));
-        
+
         const categoriasUnicas = [...new Set(herramientasData.map(h => h.categoria))].filter(Boolean);
         setToolCategories(categoriasUnicas);
       }
@@ -3611,9 +3611,9 @@ const AdminPanel = () => {
           fecha: doc.data().fecha?.toDate?.() || new Date(doc.data().fecha)
         }));
         setInformesObra(informesData);
-        setStats(prev => ({ 
-          ...prev, 
-          informesPendientes: informesData.filter(i => !i.leido).length 
+        setStats(prev => ({
+          ...prev,
+          informesPendientes: informesData.filter(i => !i.leido).length
         }));
       }
     } catch (error) {
@@ -3623,14 +3623,13 @@ const AdminPanel = () => {
 
   const showNotification = (message, type = 'info') => {
     const toast = document.createElement('div');
-    toast.className = `fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg z-50 ${
-      type === 'success' ? 'bg-green-500 text-white' :
-      type === 'error' ? 'bg-red-500 text-white' :
-      'bg-blue-500 text-white'
-    }`;
+    toast.className = `fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg z-50 ${type === 'success' ? 'bg-green-500 text-white' :
+        type === 'error' ? 'bg-red-500 text-white' :
+          'bg-blue-500 text-white'
+      }`;
     toast.textContent = message;
     document.body.appendChild(toast);
-    
+
     setTimeout(() => {
       toast.remove();
     }, 3000);
@@ -3727,7 +3726,7 @@ const AdminPanel = () => {
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
             <span className="text-red-700">{error}</span>
-            <button 
+            <button
               onClick={() => setError(null)}
               className="ml-auto text-red-500 hover:text-red-700"
             >
@@ -3745,19 +3744,24 @@ const AdminPanel = () => {
             { key: 'obras', label: 'Gestionar Obras' },
             { key: 'tracking', label: 'Control de Agentes' },
             { key: 'reportes', label: 'Reportes Básicos' },
+
+            // *** NUEVAS PESTAÑAS PARA SISTEMA DE REPORTES ***
+            { key: 'items-trabajo', label: 'Items de Trabajo' },
+            { key: 'reportes-trabajo', label: 'Reportes de Trabajo' },
+
             { key: 'materiales', label: 'Materiales' },
             { key: 'herramientas', label: 'Herramientas' },
             { key: 'informes-obra', label: 'Informes Diarios' },
             { key: 'reportes-avanzados', label: 'Reportes PDF' }
           ].map((tab) => (
+
             <button
               key={tab.key}
               onClick={() => setActiveSection(tab.key)}
-              className={`py-3 px-4 font-medium transition-all duration-200 flex items-center space-x-2 whitespace-nowrap ${
-                activeSection === tab.key
+              className={`py-3 px-4 font-medium transition-all duration-200 flex items-center space-x-2 whitespace-nowrap ${activeSection === tab.key
                   ? 'border-b-2 border-blue-500 text-blue-600 bg-white'
                   : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-              }`}
+                }`}
             >
               <span>{getTabIcon(tab.key)}</span>
               <span>{tab.label}</span>
@@ -3799,7 +3803,7 @@ const AdminPanel = () => {
         <div className="p-6">
           {/* SECCIÓN USUARIOS */}
           {activeSection === 'usuarios' && (
-            <UserManagement 
+            <UserManagement
               usuarios={usuarios}
               onDataChange={loadData}
               showNotification={showNotification}
@@ -3808,7 +3812,7 @@ const AdminPanel = () => {
 
           {/* SECCIÓN OBRAS */}
           {activeSection === 'obras' && (
-            <WorkManagement 
+            <WorkManagement
               obras={obras}
               albaniles={albaniles}
               jefesDeObra={jefesDeObra}
@@ -3824,6 +3828,16 @@ const AdminPanel = () => {
 
           {/* SECCIÓN REPORTES BÁSICOS */}
           {activeSection === 'reportes' && (
+            <BasicReports
+              obras={obras}
+              usuarios={usuarios}
+              albaniles={albaniles}
+              jefesDeObra={jefesDeObra}
+              empresaData={empresaData}
+            />
+          )}
+             {/* SECCIÓN REPORTES BÁSICOS */}
+          {activeSection === 'reportes' && (
             <BasicReports 
               obras={obras}
               usuarios={usuarios}
@@ -3833,9 +3847,24 @@ const AdminPanel = () => {
             />
           )}
 
+          {/* *** NUEVAS SECCIONES PARA SISTEMA DE REPORTES *** */}
+          {/* SECCIÓN ITEMS DE TRABAJO */}
+          {activeSection === 'items-trabajo' && (
+            <WorkItemsManagement 
+              user={{ role: 'admin', name: 'Admin VIVEKA' }}
+            />
+          )}
+
+          {/* SECCIÓN REPORTES DE TRABAJO */}
+          {activeSection === 'reportes-trabajo' && (
+            <WorkReportsManagement 
+              user={{ role: 'admin', name: 'Admin VIVEKA' }}
+            />
+          )}
+
           {/* SECCIÓN MATERIALES */}
           {activeSection === 'materiales' && (
-            <MaterialManagement 
+            <MaterialManagement
               materiales={materiales}
               materialCategories={materialCategories}
               onDataChange={loadMateriales}
@@ -3846,7 +3875,7 @@ const AdminPanel = () => {
 
           {/* SECCIÓN HERRAMIENTAS */}
           {activeSection === 'herramientas' && (
-            <ToolManagement 
+            <ToolManagement
               herramientas={herramientas}
               toolCategories={toolCategories}
               onDataChange={loadHerramientas}
@@ -3857,7 +3886,7 @@ const AdminPanel = () => {
 
           {/* SECCIÓN INFORMES DIARIOS */}
           {activeSection === 'informes-obra' && (
-            <DailyReports 
+            <DailyReports
               informesObra={informesObra}
               stats={stats}
               onDataChange={loadInformesObra}
@@ -3867,7 +3896,7 @@ const AdminPanel = () => {
 
           {/* SECCIÓN REPORTES AVANZADOS */}
           {activeSection === 'reportes-avanzados' && (
-            <AdvancedReports 
+            <AdvancedReports
               usuarios={usuarios}
               obras={obras}
               albaniles={albaniles}
