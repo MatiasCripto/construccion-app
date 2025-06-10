@@ -86,7 +86,8 @@ const GeolocationComponent = ({ onLocationUpdate, autoTrack = false, highAccurac
     // *** NUEVO: Guardar también en Firebase para el admin ***
     if (window.LocationTrackingService && window.user?.id) {
       try {
-        await window.LocationTrackingService.saveEmployeeLocation(window.user.id, location);
+        await window.LocationTrackingService.updateEmployeeLocation(window.user.id, location);
+
         console.log('📍 Ubicación guardada para admin');
       } catch (error) {
         console.error('Error guardando en Firebase:', error);
