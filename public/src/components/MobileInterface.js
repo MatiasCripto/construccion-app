@@ -1,3 +1,4 @@
+// src/components/MobileInterface.js - VERSIÓN COMPLETA ACTUALIZADA
 const { useState, useEffect, useRef } = React;
 
 const MobileInterface = ({ user, onLogout }) => {
@@ -147,6 +148,12 @@ const MobileInterface = ({ user, onLogout }) => {
         {activeTab === 'obras' && (
           <MobileObrasList obras={obras} user={user} onUpdate={loadData} />
         )}
+        
+        {/* *** NUEVA SECCIÓN DE REPORTES *** */}
+        {activeTab === 'reportes' && (
+          <MobileReportesView user={user} obras={obras} />
+        )}
+        
         {activeTab === 'camera' && (
           <MobileCameraView obras={obras} currentLocation={currentLocation} />
         )}
@@ -462,10 +469,71 @@ const TabButton = ({ label, active, onClick }) => (
   </button>
 );
 
-// Navigation inferior
+// *** NUEVO COMPONENTE: Vista de Reportes Móvil ***
+const MobileReportesView = ({ user, obras }) => {
+  const [currentWork, setCurrentWork] = useState(null);
+
+  useEffect(() => {
+    // Encontrar la obra activa del usuario
+    const obraActiva = obras.find(obra => 
+      obra.estado === 'en_progreso' && 
+      (obra.albanil_id === user.id || obra.trabajadores?.includes(user.id))
+    );
+    setCurrentWork(obraActiva);
+  }, [obras, user]);
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-bold">📋 Mis Reportes</h2>
+        {currentWork && (
+          <div className="bg-green-100 px-3 py-1 rounded-full">
+            <span className="text-green-800 text-sm font-medium">
+              {currentWork.nombre || currentWork.name}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Información de obra actual */}
+      {currentWork ? (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="font-semibold text-blue-800 mb-1">🏗️ Obra Activa</h3>
+          <p className="text-blue-700 text-sm">{currentWork.nombre || currentWork.name}</p>
+          <p className="text-blue-600 text-xs">📍 {currentWork.ubicacion}</p>
+        </div>
+      ) : (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h3 className="font-semibold text-yellow-800 mb-1">⚠️ Sin Obra Asignada</h3>
+          <p className="text-yellow-700 text-sm">No tienes una obra activa para reportar</p>
+        </div>
+      )}
+
+      {/* WorkerReports Component */}
+      <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+        {currentWork ? (
+          <WorkerReports 
+            user={user} 
+            currentWork={currentWork}
+          />
+        ) : (
+          <div className="p-8 text-center text-gray-500">
+            <div className="text-4xl mb-2">🏗️</div>
+            <p>Necesitas estar asignado a una obra activa para crear reportes</p>
+            <p className="text-sm mt-2">Contacta a tu supervisor para ser asignado</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Navigation inferior - *** ACTUALIZADA CON NUEVA PESTAÑA ***
 const MobileBottomNav = ({ activeTab, onTabChange, userRole }) => {
   const tabs = [
     { id: 'obras', icon: '🏗️', label: 'Obras' },
+    { id: 'reportes', icon: '📋', label: 'Reportes' }, // *** NUEVA PESTAÑA ***
     { id: 'camera', icon: '📷', label: 'Foto' },
     { id: 'chat', icon: '💬', label: 'Chat' },
     { id: 'profile', icon: '👤', label: 'Perfil' }

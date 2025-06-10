@@ -1,3 +1,4 @@
+// src/components/AlbanilWorkflow.js - VERSIÓN ACTUALIZADA
 const { useState, useEffect } = React;
 
 const AlbanilWorkflow = ({ obra, user, onUpdate }) => {
@@ -284,16 +285,18 @@ const Paso1FotosIniciales = ({ obra, user, onCompletar }) => {
   );
 };
 
-// Componente para Paso 2: Solicitar Materiales
+// *** PASO 2 ACTUALIZADO - USA MaterialSelector ***
 const Paso2SolicitarMateriales = ({ obra, user, onCompletar }) => {
   const [materialesSolicitados, setMaterialesSolicitados] = useState(false);
   
   return (
     <div>
-      <MaterialSelectorStep 
-        obraId={obra.id} 
-        user={user}
-        onMaterialesSolicitados={() => setMaterialesSolicitados(true)}
+      {/* USAR EL MaterialSelector EXISTENTE CON WORKFLOW MODE */}
+      <MaterialSelector 
+        user={user} 
+        currentWork={obra}
+        onMaterialRequest={() => setMaterialesSolicitados(true)}
+        workflowMode={true} // Modo especial para workflow
       />
       
       {materialesSolicitados && (
@@ -503,168 +506,8 @@ const PhotoUploadStep = ({ obraId, user, tipoRequired, minFotos, onFotosChange, 
   );
 };
 
-// Componente auxiliar para solicitar materiales
-const MaterialSelectorStep = ({ obraId, user, onMaterialesSolicitados }) => {
-  return (
-    <div>
-      <MaterialSelectorSimplified 
-        obraId={obraId} 
-        user={user}
-        onSolicitudEnviada={onMaterialesSolicitados}
-      />
-    </div>
-  );
-};
-
-// Versión simplificada del MaterialSelector para el workflow
-const MaterialSelectorSimplified = ({ obraId, user, onSolicitudEnviada }) => {
-  const [materiales, setMateriales] = useState([]);
-  const [selectedMateriales, setSelectedMateriales] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    loadMateriales();
-  }, []);
-
-  const loadMateriales = async () => {
-    try {
-      const response = await fetch('/api/materiales', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setMateriales(data);
-      }
-    } catch (err) {
-      console.error('Error al cargar materiales:', err);
-    }
-  };
-
-  const addMaterial = () => {
-    setSelectedMateriales([...selectedMateriales, { material_id: '', cantidad: 1 }]);
-  };
-
-  const updateMaterial = (index, field, value) => {
-    const updated = [...selectedMateriales];
-    updated[index][field] = value;
-    setSelectedMateriales(updated);
-  };
-
-  const removeMaterial = (index) => {
-    setSelectedMateriales(selectedMateriales.filter((_, i) => i !== index));
-  };
-
-  const submitSolicitud = async () => {
-    if (selectedMateriales.length === 0) {
-      alert('Selecciona al menos un material');
-      return;
-    }
-
-    const materialesValidos = selectedMateriales.filter(m => m.material_id && m.cantidad > 0);
-    if (materialesValidos.length === 0) {
-      alert('Completa la información de los materiales');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const response = await fetch('/api/materiales/solicitar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          obra_id: obraId,
-          materiales: materialesValidos
-        })
-      });
-
-      if (response.ok) {
-        setSelectedMateriales([]);
-        alert('Materiales solicitados exitosamente');
-        onSolicitudEnviada();
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Error al solicitar materiales');
-      }
-    } catch (err) {
-      alert('Error de conexión');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-900">🧱 Seleccionar Materiales Necesarios</h3>
-      
-      <div className="space-y-4">
-        {selectedMateriales.map((item, index) => (
-          <div key={index} className="flex space-x-4 items-end p-4 bg-gray-50 rounded-lg">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Material
-              </label>
-              <select
-                value={item.material_id}
-                onChange={(e) => updateMaterial(index, 'material_id', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Seleccionar material</option>
-                {materiales.map(material => (
-                  <option key={material.id} value={material.id}>
-                    {material.nombre} ({material.unidad})
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="w-24">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Cantidad
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={item.cantidad}
-                onChange={(e) => updateMaterial(index, 'cantidad', parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            <button
-              onClick={() => removeMaterial(index)}
-              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-        
-        <div className="flex space-x-2">
-          <button
-            onClick={addMaterial}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            + Agregar Material
-          </button>
-          
-          {selectedMateriales.length > 0 && (
-            <button
-              onClick={submitSolicitud}
-              disabled={submitting}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
-            >
-              {submitting ? 'Enviando...' : '📨 Enviar Solicitud'}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
+// *** ELIMINADAS LAS FUNCIONES DUPLICADAS ***
+// MaterialSelectorStep - ELIMINADA
+// MaterialSelectorSimplified - ELIMINADA (era la duplicada)
 
 window.AlbanilWorkflow = AlbanilWorkflow;
