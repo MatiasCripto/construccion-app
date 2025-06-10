@@ -1,4 +1,4 @@
-// src/components/MaterialSelector.js
+// src/components/MaterialSelector.js - VERSIÓN ADAPTADA A ESTRUCTURA REAL
 const { useState, useEffect } = React;
 
 const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode = false }) => {
@@ -21,20 +21,40 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
         try {
             setLoading(true);
             if (window.db) {
-                const snapshot = await window.db.collection('materiales')
-                    .where('disponible', '==', true)
-                    .orderBy('nombre')
-                    .get();
+                console.log('🔄 Cargando materiales...');
                 
-                const materialesData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
+                const snapshot = await window.db.collection('materiales').get();
                 
-                setMateriales(materialesData);
+                const materialesData = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    
+                    // *** ADAPTAR ESTRUCTURA DE DATOS ***
+                    return {
+                        id: doc.id,
+                        nombre: data.nombre,
+                        descripcion: data.descripcion || '',
+                        categoria: data.categoria,
+                        unidad: data.unidad || 'unidad',
+                        precio: data.precio || data.precio_estimado || 0, // ADAPTAR PRECIO
+                        stock: data.stock || data.stock_minimo || 0, // ADAPTAR STOCK
+                        disponible: data.disponible !== false, // true si no está definido
+                        // Campos originales por si acaso
+                        originalData: data
+                    };
+                });
+                
+                // Filtrar disponibles
+                const materialesDisponibles = materialesData.filter(material => 
+                    material.disponible && material.nombre // debe tener nombre
+                );
+                
+                console.log('🧱 Materiales procesados:', materialesDisponibles);
+                console.log('📋 Estructura primer material:', materialesDisponibles[0]);
+                
+                setMateriales(materialesDisponibles);
             }
         } catch (error) {
-            console.error('Error loading materials:', error);
+            console.error('❌ Error loading materials:', error);
         } finally {
             setLoading(false);
         }
@@ -45,14 +65,19 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
             if (window.db && user) {
                 const snapshot = await window.db.collection('solicitudes_materiales')
                     .where('solicitanteId', '==', user.id)
-                    .orderBy('fechaSolicitud', 'desc')
-                    .limit(10)
                     .get();
                 
-                const solicitudesData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
+                const solicitudesData = snapshot.docs
+                    .map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }))
+                    .sort((a, b) => {
+                        const dateA = a.fechaSolicitud?.toDate?.() || new Date(0);
+                        const dateB = b.fechaSolicitud?.toDate?.() || new Date(0);
+                        return dateB - dateA;
+                    })
+                    .slice(0, 10);
                 
                 setSolicitudes(solicitudesData);
             }
@@ -62,6 +87,8 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
     };
 
     const agregarASolicitud = (material) => {
+        console.log('➕ Agregando material:', material);
+        
         const existe = solicitudItems.find(item => item.id === material.id);
         
         if (existe) {
@@ -121,19 +148,16 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
 
             await window.db.collection('solicitudes_materiales').add(solicitudData);
             
-            // *** CALLBACK PARA WORKFLOW MODE ***
             if (workflowMode && onMaterialRequest) {
-                onMaterialRequest(); // Notificar al workflow que se solicitaron materiales
+                onMaterialRequest();
             }
             
             setSolicitudItems([]);
             alert('✅ Solicitud enviada exitosamente');
             
-            // Limpiar búsqueda
             setSearchTerm('');
             setSelectedCategory('todas');
             
-            // Reload solicitudes si no es workflow mode
             if (!workflowMode) {
                 loadSolicitudes();
             }
@@ -149,7 +173,7 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
     const categories = [...new Set(materiales.map(m => m.categoria))].filter(Boolean);
     
     const filteredMateriales = materiales.filter(material => {
-        const matchesSearch = material.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = material.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = selectedCategory === 'todas' || material.categoria === selectedCategory;
         return matchesSearch && matchesCategory;
     });
@@ -206,6 +230,19 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                     )}
                 </div>
             )}
+
+            {/* DEBUG INFO */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <h4 className="font-semibold text-yellow-800">🔍 Debug Info:</h4>
+                <p className="text-yellow-700 text-sm">
+                    Materiales cargados: {materiales.length} | Filtrados: {filteredMateriales.length}
+                </p>
+                {materiales.length > 0 && (
+                    <p className="text-yellow-600 text-xs">
+                        Primer material: {materiales[0]?.nombre} - {materiales[0]?.categoria}
+                    </p>
+                )}
+            </div>
 
             {/* Carrito de solicitud */}
             {solicitudItems.length > 0 && (
@@ -311,10 +348,22 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                 
                 {filteredMateriales.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
-                        {searchTerm || selectedCategory !== 'todas' 
-                            ? 'No se encontraron materiales con los filtros aplicados'
-                            : 'No hay materiales disponibles'
-                        }
+                        <div className="text-4xl mb-2">🧱</div>
+                        {materiales.length === 0 ? (
+                            <>
+                                <p>No hay materiales disponibles</p>
+                                <div className="mt-4 text-sm text-blue-600">
+                                    💡 El admin debe crear materiales primero
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <p>No se encontraron materiales con los filtros aplicados</p>
+                                <div className="mt-2 text-sm text-gray-400">
+                                    Prueba cambiando la búsqueda o categoría
+                                </div>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <div className="p-6">
@@ -338,7 +387,7 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                                     
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-gray-500">
-                                            Stock: {material.stock || 0} {material.unidad}
+                                            Stock: {material.stock} {material.unidad}
                                         </span>
                                         <button
                                             onClick={() => agregarASolicitud(material)}
