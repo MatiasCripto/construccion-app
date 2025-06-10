@@ -1,4 +1,4 @@
-// src/components/WorkerReportModal.js
+// src/components/WorkerReportModal.js - CORREGIDO para cantidades de trabajo
 const { useState, useEffect } = React;
 
 const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) => {
@@ -7,7 +7,8 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
     const [selectedCategory, setSelectedCategory] = useState('todas');
     const [comment, setComment] = useState('');
     const [photos, setPhotos] = useState([]);
-    const [step, setStep] = useState(1); // 1: seleccionar items, 2: cantidades, 3: confirmación
+    const [step, setStep] = useState(1);
+    const [validationErrors, setValidationErrors] = useState({});
 
     const categories = [...new Set(workItems.map(item => item.category))];
     
@@ -27,83 +28,123 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
                 id: item.id,
                 name: item.name,
                 category: item.category,
-                unit: item.unit,
-                quantity: 1
+                unit: item.unit, // Unidad predefinida del item
+                quantity: '', // Cantidad vacía para forzar input
+                customUnit: item.unit // Unidad editable (opcional)
             }]);
         }
+        
+        setValidationErrors({});
     };
 
     const handleQuantityChange = (itemId, quantity) => {
-        const numQuantity = Math.max(0, parseFloat(quantity) || 0);
+        const numQuantity = quantity === '' ? '' : parseFloat(quantity) || '';
         setSelectedItems(selectedItems.map(item => 
             item.id === itemId 
                 ? { ...item, quantity: numQuantity }
                 : item
         ));
+        
+        if (validationErrors[itemId]) {
+            setValidationErrors(prev => ({
+                ...prev,
+                [itemId]: ''
+            }));
+        }
+    };
+
+    // *** NUEVA: Cambiar unidad (opcional) ***
+    const handleUnitChange = (itemId, newUnit) => {
+        setSelectedItems(selectedItems.map(item => 
+            item.id === itemId 
+                ? { ...item, customUnit: newUnit.trim() || item.unit }
+                : item
+        ));
+    };
+
+    const validateQuantities = () => {
+        const errors = {};
+        let hasErrors = false;
+        
+        selectedItems.forEach(item => {
+            if (item.quantity === '' || item.quantity <= 0) {
+                errors[item.id] = 'Debes especificar cuánto trabajo realizaste';
+                hasErrors = true;
+            }
+        });
+        
+        setValidationErrors(errors);
+        return !hasErrors;
     };
 
     const handlePhotoCapture = async () => {
         try {
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment' } 
-                });
-                
-                // Aquí podrías implementar la captura de foto
-                // Por ahora simulamos con un input file
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'image/*';
-                input.capture = 'environment';
-                
-                input.onchange = (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            setPhotos([...photos, {
-                                id: Date.now(),
-                                url: e.target.result,
-                                file: file,
-                                timestamp: new Date()
-                            }]);
-                        };
-                        reader.readAsDataURL(file);
-                    }
-                };
-                
-                input.click();
-            }
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment';
+            
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        setPhotos([...photos, {
+                            id: Date.now(),
+                            url: e.target.result,
+                            file: file,
+                            timestamp: new Date()
+                        }]);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+            
+            input.click();
         } catch (error) {
             console.error('Error accessing camera:', error);
             alert('No se pudo acceder a la cámara');
         }
     };
 
+    const handleNextStep = () => {
+        if (step === 1 && selectedItems.length === 0) {
+            alert('Debes seleccionar al menos un item de trabajo');
+            return;
+        }
+        
+        if (step === 2 && !validateQuantities()) {
+            alert('Todas las cantidades son obligatorias');
+            return;
+        }
+        
+        setStep(step + 1);
+    };
+
     const handleSubmit = () => {
-        if (selectedItems.length === 0) {
-            alert('Debes seleccionar al menos un item');
+        if (!validateQuantities()) {
+            alert('Verifica que todas las cantidades sean válidas');
             return;
         }
 
-        const invalidItems = selectedItems.filter(item => item.quantity <= 0);
-        if (invalidItems.length > 0) {
-            alert('Todas las cantidades deben ser mayores a 0');
-            return;
-        }
+        // Preparar datos con unidades finales
+        const itemsWithFinalUnits = selectedItems.map(item => ({
+            ...item,
+            unit: item.customUnit || item.unit // Usar unidad custom o la original
+        }));
 
         const reportData = {
-            items: selectedItems,
+            items: itemsWithFinalUnits,
             comment: comment.trim(),
             photos: photos,
-            location: null // Podrías agregar geolocalización
+            location: null
         };
 
         onSave(reportData);
     };
 
     const getTotalItems = () => selectedItems.length;
-    const getTotalQuantity = () => selectedItems.reduce((sum, item) => sum + item.quantity, 0);
+    const getTotalQuantity = () => selectedItems.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -147,8 +188,8 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
                         ))}
                     </div>
                     <div className="mt-2 text-sm text-gray-600">
-                        {step === 1 && 'Selecciona los items de trabajo realizados'}
-                        {step === 2 && 'Especifica las cantidades de cada item'}
+                        {step === 1 && 'Selecciona los trabajos que realizaste'}
+                        {step === 2 && 'Especifica cuánto trabajo hiciste de cada item'}
                         {step === 3 && 'Revisa y confirma tu reporte'}
                     </div>
                 </div>
@@ -161,7 +202,7 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <input
                                     type="text"
-                                    placeholder="🔍 Buscar items..."
+                                    placeholder="🔍 Buscar trabajos..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -207,7 +248,7 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
                                                 <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded">
                                                     {item.category}
                                                 </span>
-                                                <span className="text-gray-500">{item.unit}</span>
+                                                <span className="text-gray-500">se mide en {item.unit}</span>
                                             </div>
                                         </div>
                                     );
@@ -217,7 +258,7 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
                             {/* Selected Count */}
                             <div className="bg-blue-50 p-4 rounded-lg">
                                 <p className="text-blue-800">
-                                    📋 Items seleccionados: {selectedItems.length}
+                                    📋 Trabajos seleccionados: {selectedItems.length}
                                 </p>
                             </div>
                         </div>
@@ -225,26 +266,74 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
 
                     {step === 2 && (
                         <div className="space-y-4">
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                                <h4 className="font-semibold text-yellow-800 mb-1">⚠️ Cantidades Obligatorias</h4>
+                                <p className="text-yellow-700 text-sm">
+                                    Especifica cuánto trabajo realizaste de cada item. Las cantidades son obligatorias.
+                                </p>
+                            </div>
+
                             <div className="max-h-96 overflow-y-auto space-y-4">
                                 {selectedItems.map((item) => (
-                                    <div key={item.id} className="border border-gray-200 rounded-lg p-4">
-                                        <div className="flex items-center justify-between">
+                                    <div key={item.id} className={`border rounded-lg p-4 ${
+                                        validationErrors[item.id] ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                                    }`}>
+                                        <div className="flex items-start justify-between mb-3">
                                             <div className="flex-1">
                                                 <h4 className="font-medium text-gray-900">{item.name}</h4>
                                                 <p className="text-sm text-gray-600">{item.category}</p>
                                             </div>
-                                            <div className="flex items-center space-x-2">
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* *** CANTIDAD (OBLIGATORIA) *** */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    ¿Cuánto trabajaste? *
+                                                </label>
                                                 <input
                                                     type="number"
                                                     min="0"
-                                                    step="0.1"
+                                                    step="0.01"
                                                     value={item.quantity}
                                                     onChange={(e) => handleQuantityChange(item.id, e.target.value)}
-                                                    className="w-20 px-2 py-1 border border-gray-300 rounded text-center"
+                                                    placeholder="Ej: 15.5"
+                                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                                        validationErrors[item.id] ? 'border-red-500' : 'border-gray-300'
+                                                    }`}
                                                 />
-                                                <span className="text-sm text-gray-600">{item.unit}</span>
+                                                {validationErrors[item.id] && (
+                                                    <p className="mt-1 text-xs text-red-600">{validationErrors[item.id]}</p>
+                                                )}
+                                            </div>
+
+                                            {/* *** UNIDAD (OPCIONAL) *** */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Unidad 
+                                                    <span className="text-gray-400 text-xs ml-1">(opcional)</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={item.customUnit}
+                                                    onChange={(e) => handleUnitChange(item.id, e.target.value)}
+                                                    placeholder={item.unit}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <p className="mt-1 text-xs text-gray-500">
+                                                    Por defecto: {item.unit}
+                                                </p>
                                             </div>
                                         </div>
+
+                                        {/* Preview */}
+                                        {item.quantity && (
+                                            <div className="mt-3 p-2 bg-green-50 rounded border border-green-200">
+                                                <p className="text-green-800 text-sm">
+                                                    ✅ {item.quantity} {item.customUnit || item.unit} de "{item.name}"
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -311,7 +400,7 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
                                         <p className="font-medium">{worker.name}</p>
                                     </div>
                                     <div>
-                                        <span className="text-sm text-gray-600">Items reportados:</span>
+                                        <span className="text-sm text-gray-600">Trabajos reportados:</span>
                                         <p className="font-medium">{getTotalItems()}</p>
                                     </div>
                                     <div>
@@ -337,7 +426,7 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
 
                             {/* Items Detail */}
                             <div>
-                                <h5 className="font-medium text-gray-900 mb-3">Items Reportados:</h5>
+                                <h5 className="font-medium text-gray-900 mb-3">Trabajos Reportados:</h5>
                                 <div className="space-y-2">
                                     {selectedItems.map((item) => (
                                         <div key={item.id} className="flex justify-between items-center py-2 px-4 bg-white border border-gray-200 rounded">
@@ -346,7 +435,7 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
                                                 <span className="text-sm text-gray-600 ml-2">({item.category})</span>
                                             </div>
                                             <span className="font-medium text-blue-600">
-                                                {item.quantity} {item.unit}
+                                                {item.quantity} {item.customUnit || item.unit}
                                             </span>
                                         </div>
                                     ))}
@@ -359,8 +448,8 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
                 {/* Footer */}
                 <div className="flex justify-between items-center p-6 border-t border-gray-200">
                     <div className="text-sm text-gray-600">
-                        {step === 1 && `${selectedItems.length} items seleccionados`}
-                        {step === 2 && `${getTotalItems()} items • ${getTotalQuantity().toFixed(1)} unidades totales`}
+                        {step === 1 && `${selectedItems.length} trabajos seleccionados`}
+                        {step === 2 && `${getTotalItems()} trabajos • ${getTotalQuantity().toFixed(1)} unidades totales`}
                         {step === 3 && 'Listo para enviar'}
                     </div>
                     
@@ -383,7 +472,7 @@ const WorkerReportModal = ({ workItems, currentWork, worker, onSave, onClose }) 
                         
                         {step < 3 ? (
                             <button
-                                onClick={() => setStep(step + 1)}
+                                onClick={handleNextStep}
                                 disabled={step === 1 && selectedItems.length === 0}
                                 className={`px-4 py-2 rounded-lg transition-colors ${
                                     (step === 1 && selectedItems.length === 0)
