@@ -23,6 +23,35 @@ const MaterialManagement = ({ materiales, materialCategories, onDataChange, show
     }
   };
 
+  // Función para cambiar estado de material (disponible/no disponible)
+  const toggleMaterialStatus = async (materialId, currentStatus) => {
+    try {
+      await window.db.collection('materiales').doc(materialId).update({
+        disponible: !currentStatus,
+        fechaActualizacion: new Date()
+      });
+      
+      await onDataChange();
+      
+      showNotification(
+        `Material ${!currentStatus ? 'habilitado' : 'deshabilitado'} exitosamente`,
+        'success'
+      );
+    } catch (error) {
+      console.error('Error updating material status:', error);
+      showNotification('Error al actualizar el estado del material', 'error');
+    }
+  };
+
+  const handleEditMaterial = (material) => {
+    setSelectedMaterial(material);
+    setShowEditMaterialModal(true);
+  };
+
+  const handleDeleteMaterial = (materialId) => {
+    deleteMaterial(materialId);
+  };
+
   // Filtros para materiales
   const materialesFiltrados = materiales.filter(material => {
     const matchCategoria = !materialCategoryFilter || material.categoria === materialCategoryFilter;
@@ -95,48 +124,23 @@ const MaterialManagement = ({ materiales, materialCategories, onDataChange, show
         </div>
       </div>
 
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <span className="text-2xl">📦</span>
-            <div className="ml-3">
-              <p className="text-sm text-blue-600">Total Materiales</p>
-              <p className="text-2xl font-bold text-blue-800">{materiales.length}</p>
-            </div>
-          </div>
+      {/* Estadísticas - ACTUALIZADO: 3 columnas en lugar de 4 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-4 rounded-lg shadow-sm">
+          <div className="text-2xl font-bold text-blue-600">{materiales.length}</div>
+          <div className="text-gray-600">Total Materiales</div>
         </div>
-        
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <span className="text-2xl">✅</span>
-            <div className="ml-3">
-              <p className="text-sm text-green-600">Disponibles</p>
-              <p className="text-2xl font-bold text-green-800">
-                {materiales.filter(m => m.disponible !== false).length}
-              </p>
-            </div>
+        <div className="bg-white p-4 rounded-lg shadow-sm">
+          <div className="text-2xl font-bold text-green-600">
+            {materiales.filter(m => m.disponible).length}
           </div>
+          <div className="text-gray-600">Disponibles</div>
         </div>
-        
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <span className="text-2xl">📂</span>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-600">Categorías</p>
-              <p className="text-2xl font-bold text-yellow-800">{materialCategories.length}</p>
-            </div>
+        <div className="bg-white p-4 rounded-lg shadow-sm">
+          <div className="text-2xl font-bold text-red-600">
+            {materiales.filter(m => !m.disponible).length}
           </div>
-        </div>
-        
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <span className="text-2xl">🔍</span>
-            <div className="ml-3">
-              <p className="text-sm text-purple-600">Filtrados</p>
-              <p className="text-2xl font-bold text-purple-800">{materialesFiltrados.length}</p>
-            </div>
-          </div>
+          <div className="text-gray-600">No Disponibles</div>
         </div>
       </div>
 
@@ -144,32 +148,28 @@ const MaterialManagement = ({ materiales, materialCategories, onDataChange, show
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
+            {/* ACTUALIZADO: Headers simplificados */}
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Material
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Categoría
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Unidad
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Precio Est.
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Estado
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Creado
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Acciones
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            {/* ACTUALIZADO: Body simplificado */}
+            <tbody className="divide-y divide-gray-200">
               {materialesFiltrados.map((material) => (
                 <tr key={material.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4">
                     <div>
                       <div className="text-sm font-medium text-gray-900">
                         {material.nombre}
@@ -181,41 +181,35 @@ const MaterialManagement = ({ materiales, materialCategories, onDataChange, show
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {material.categoria || 'Sin categoría'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {material.unidad}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {material.precio_estimado ? `$${material.precio_estimado}` : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      material.disponible !== false 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {material.disponible !== false ? '✅ Disponible' : '❌ No disponible'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                  <td className="px-6 py-4">
                     <button
-                      onClick={() => {
-                        setSelectedMaterial(material);
-                        setShowEditMaterialModal(true);
-                      }}
-                      className="text-blue-600 hover:text-blue-900"
+                      onClick={() => toggleMaterialStatus(material.id, material.disponible)}
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                        material.disponible
+                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                          : 'bg-red-100 text-red-800 hover:bg-red-200'
+                      }`}
                     >
-                      ✏️ Editar
+                      {material.disponible ? '✅ Disponible' : '❌ No disponible'}
+                    </button>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {material.fechaCreacion?.toDate?.()?.toLocaleDateString() || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 text-right text-sm font-medium space-x-2">
+                    <button
+                      onClick={() => handleEditMaterial(material)}
+                      className="text-blue-600 hover:text-blue-900 transition-colors"
+                      title="Editar"
+                    >
+                      ✏️
                     </button>
                     <button
-                      onClick={() => deleteMaterial(material.id)}
-                      className="text-red-600 hover:text-red-900"
+                      onClick={() => handleDeleteMaterial(material.id)}
+                      className="text-red-600 hover:text-red-900 transition-colors"
+                      title="Eliminar"
                     >
-                      🗑️ Eliminar
+                      🗑️
                     </button>
                   </td>
                 </tr>

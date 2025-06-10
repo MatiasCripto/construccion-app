@@ -1,4 +1,4 @@
-// src/components/MaterialSelector.js - VERSIÓN ADAPTADA A ESTRUCTURA REAL
+// src/components/MaterialSelector.js - VERSIÓN FINAL CORREGIDA
 const { useState, useEffect } = React;
 
 const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode = false }) => {
@@ -6,8 +6,6 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
     const [solicitudItems, setSolicitudItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('todas');
-    const [showSolicitud, setShowSolicitud] = useState(false);
     const [solicitudes, setSolicitudes] = useState([]);
 
     useEffect(() => {
@@ -21,36 +19,28 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
         try {
             setLoading(true);
             if (window.db) {
-                console.log('🔄 Cargando materiales...');
+                console.log('🔄 Cargando materiales para solicitud...');
                 
                 const snapshot = await window.db.collection('materiales').get();
                 
                 const materialesData = snapshot.docs.map(doc => {
                     const data = doc.data();
                     
-                    // *** ADAPTAR ESTRUCTURA DE DATOS ***
                     return {
                         id: doc.id,
                         nombre: data.nombre,
                         descripcion: data.descripcion || '',
-                        categoria: data.categoria,
-                        unidad: data.unidad || 'unidad',
-                        precio: data.precio || data.precio_estimado || 0, // ADAPTAR PRECIO
-                        stock: data.stock || data.stock_minimo || 0, // ADAPTAR STOCK
-                        disponible: data.disponible !== false, // true si no está definido
-                        // Campos originales por si acaso
+                        disponible: data.disponible !== false,
                         originalData: data
                     };
                 });
                 
                 // Filtrar disponibles
                 const materialesDisponibles = materialesData.filter(material => 
-                    material.disponible && material.nombre // debe tener nombre
+                    material.disponible && material.nombre
                 );
                 
-                console.log('🧱 Materiales procesados:', materialesDisponibles);
-                console.log('📋 Estructura primer material:', materialesDisponibles[0]);
-                
+                console.log('🧱 Materiales disponibles para solicitar:', materialesDisponibles.length);
                 setMateriales(materialesDisponibles);
             }
         } catch (error) {
@@ -62,7 +52,7 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
 
     const loadSolicitudes = async () => {
         try {
-            if (window.db && user) {
+            if (window.db && user && user.id) {
                 const snapshot = await window.db.collection('solicitudes_materiales')
                     .where('solicitanteId', '==', user.id)
                     .get();
@@ -87,7 +77,7 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
     };
 
     const agregarASolicitud = (material) => {
-        console.log('➕ Agregando material:', material);
+        console.log('➕ Agregando material a solicitud:', material.nombre);
         
         const existe = solicitudItems.find(item => item.id === material.id);
         
@@ -99,8 +89,11 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
             ));
         } else {
             setSolicitudItems([...solicitudItems, {
-                ...material,
-                cantidad: 1
+                id: material.id,
+                nombre: material.nombre,
+                descripcion: material.descripcion,
+                cantidad: 1,
+                unidad: '' // *** UNIDAD OPCIONAL DEL ALBAÑIL ***
             }]);
         }
     };
@@ -115,6 +108,15 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                     : item
             ));
         }
+    };
+
+    // *** NUEVA: Actualizar unidad ***
+    const actualizarUnidad = (materialId, nuevaUnidad) => {
+        setSolicitudItems(solicitudItems.map(item => 
+            item.id === materialId 
+                ? { ...item, unidad: nuevaUnidad.trim() }
+                : item
+        ));
     };
 
     const eliminarDeSolicitud = (materialId) => {
@@ -132,19 +134,26 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
             return;
         }
 
+        // *** VERIFICAR DATOS DEL USUARIO ***
+        if (!user || !user.id) {
+            alert('Error: Datos de usuario no válidos');
+            return;
+        }
+
         setLoading(true);
         try {
             const solicitudData = {
                 obraId: currentWork.id,
-                obraNombre: currentWork.name || currentWork.nombre,
+                obraNombre: currentWork.name || currentWork.nombre || 'Obra sin nombre',
                 solicitanteId: user.id,
-                solicitanteNombre: user.name,
+                solicitanteNombre: user.name || user.nombre || user.email || 'Usuario sin nombre', // *** FALLBACK ***
                 items: solicitudItems,
                 estado: 'pendiente',
                 fechaSolicitud: new Date(),
-                total: solicitudItems.reduce((sum, item) => sum + (item.precio * item.cantidad), 0),
                 tipo: workflowMode ? 'workflow' : 'normal'
             };
+
+            console.log('📤 Enviando solicitud:', solicitudData);
 
             await window.db.collection('solicitudes_materiales').add(solicitudData);
             
@@ -153,29 +162,25 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
             }
             
             setSolicitudItems([]);
-            alert('✅ Solicitud enviada exitosamente');
+            alert('✅ Solicitud de materiales enviada exitosamente');
             
             setSearchTerm('');
-            setSelectedCategory('todas');
             
             if (!workflowMode) {
                 loadSolicitudes();
             }
             
         } catch (error) {
-            console.error('Error enviando solicitud:', error);
+            console.error('❌ Error enviando solicitud:', error);
             alert('❌ Error al enviar la solicitud');
         } finally {
             setLoading(false);
         }
     };
 
-    const categories = [...new Set(materiales.map(m => m.categoria))].filter(Boolean);
-    
     const filteredMateriales = materiales.filter(material => {
         const matchesSearch = material.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = selectedCategory === 'todas' || material.categoria === selectedCategory;
-        return matchesSearch && matchesCategory;
+        return matchesSearch;
     });
 
     const getEstadoColor = (estado) => {
@@ -206,7 +211,7 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                         🧱 Paso 2: Solicitar Materiales Necesarios
                     </h3>
                     <p className="text-blue-700 text-sm mt-1">
-                        Selecciona los materiales que necesitas para realizar el trabajo
+                        Solicita los materiales que necesitas para empezar el trabajo
                     </p>
                 </div>
             )}
@@ -222,10 +227,10 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                     </div>
                     {solicitudItems.length > 0 && (
                         <button
-                            onClick={() => setShowSolicitud(!showSolicitud)}
+                            onClick={() => console.log('Ver solicitud')}
                             className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
                         >
-                            🛒 Ver Solicitud ({solicitudItems.length})
+                            🛒 Solicitud ({solicitudItems.length})
                         </button>
                     )}
                 </div>
@@ -233,15 +238,10 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
 
             {/* DEBUG INFO */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <h4 className="font-semibold text-yellow-800">🔍 Debug Info:</h4>
+                <h4 className="font-semibold text-yellow-800">🔍 Info:</h4>
                 <p className="text-yellow-700 text-sm">
-                    Materiales cargados: {materiales.length} | Filtrados: {filteredMateriales.length}
+                    Materiales disponibles: {materiales.length} | En solicitud: {solicitudItems.length}
                 </p>
-                {materiales.length > 0 && (
-                    <p className="text-yellow-600 text-xs">
-                        Primer material: {materiales[0]?.nombre} - {materiales[0]?.categoria}
-                    </p>
-                )}
             </div>
 
             {/* Carrito de solicitud */}
@@ -249,28 +249,23 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold text-gray-800">
-                            🛒 Materiales Seleccionados ({solicitudItems.length})
+                            🛒 Materiales para Solicitar ({solicitudItems.length})
                         </h3>
-                        {!workflowMode && (
-                            <button
-                                onClick={() => setShowSolicitud(!showSolicitud)}
-                                className="text-blue-600 hover:text-blue-800"
-                            >
-                                {showSolicitud ? 'Ocultar' : 'Mostrar'}
-                            </button>
-                        )}
                     </div>
                     
-                    {(showSolicitud || workflowMode) && (
-                        <div className="space-y-3">
-                            {solicitudItems.map((item) => (
-                                <div key={item.id} className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
-                                    <div className="flex-1">
-                                        <h4 className="font-medium text-gray-900">{item.nombre}</h4>
-                                        <p className="text-sm text-gray-600">{item.categoria}</p>
-                                        <p className="text-sm text-green-600">${item.precio} por {item.unidad}</p>
-                                    </div>
-                                    <div className="flex items-center space-x-3">
+                    <div className="space-y-3">
+                        {solicitudItems.map((item) => (
+                            <div key={item.id} className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
+                                <div className="flex-1 mr-4">
+                                    <h4 className="font-medium text-gray-900">{item.nombre}</h4>
+                                    {item.descripcion && (
+                                        <p className="text-sm text-gray-600">{item.descripcion}</p>
+                                    )}
+                                </div>
+                                
+                                <div className="flex items-center space-x-3">
+                                    {/* Cantidad */}
+                                    <div className="flex items-center space-x-2">
                                         <button
                                             onClick={() => actualizarCantidad(item.id, item.cantidad - 1)}
                                             className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
@@ -284,58 +279,49 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                                         >
                                             +
                                         </button>
-                                        <span className="w-16 text-sm text-gray-600">{item.unidad}</span>
-                                        <button
-                                            onClick={() => eliminarDeSolicitud(item.id)}
-                                            className="text-red-600 hover:text-red-800 ml-2"
-                                        >
-                                            ✕
-                                        </button>
                                     </div>
+                                    
+                                    {/* *** UNIDAD OPCIONAL *** */}
+                                    <input
+                                        type="text"
+                                        value={item.unidad}
+                                        onChange={(e) => actualizarUnidad(item.id, e.target.value)}
+                                        placeholder="unidad"
+                                        className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                                    />
+                                    
+                                    <button
+                                        onClick={() => eliminarDeSolicitud(item.id)}
+                                        className="text-red-600 hover:text-red-800 ml-2"
+                                    >
+                                        ✕
+                                    </button>
                                 </div>
-                            ))}
-                            
-                            <div className="border-t pt-4">
-                                <div className="flex justify-between items-center mb-4">
-                                    <span className="text-lg font-semibold">Total estimado:</span>
-                                    <span className="text-xl font-bold text-green-600">
-                                        ${solicitudItems.reduce((sum, item) => sum + (item.precio * item.cantidad), 0).toFixed(2)}
-                                    </span>
-                                </div>
-                                <button
-                                    onClick={enviarSolicitud}
-                                    disabled={loading}
-                                    className="w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-lg font-medium disabled:opacity-50"
-                                >
-                                    {loading ? 'Enviando...' : '📤 Enviar Solicitud'}
-                                </button>
                             </div>
+                        ))}
+                        
+                        <div className="border-t pt-4">
+                            <button
+                                onClick={enviarSolicitud}
+                                disabled={loading}
+                                className="w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-lg font-medium disabled:opacity-50"
+                            >
+                                {loading ? 'Enviando...' : '📤 Enviar Solicitud de Materiales'}
+                            </button>
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
 
             {/* Filtros */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input
-                        type="text"
-                        placeholder="🔍 Buscar materiales..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                        <option value="todas">Todas las categorías</option>
-                        {categories.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                    </select>
-                </div>
+                <input
+                    type="text"
+                    placeholder="🔍 Buscar materiales..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
             </div>
 
             {/* Lista de materiales */}
@@ -358,9 +344,9 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                             </>
                         ) : (
                             <>
-                                <p>No se encontraron materiales con los filtros aplicados</p>
+                                <p>No se encontraron materiales con la búsqueda</p>
                                 <div className="mt-2 text-sm text-gray-400">
-                                    Prueba cambiando la búsqueda o categoría
+                                    Prueba con otros términos
                                 </div>
                             </>
                         )}
@@ -375,25 +361,17 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                                         {material.descripcion && (
                                             <p className="text-sm text-gray-600 mb-2">{material.descripcion}</p>
                                         )}
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                                {material.categoria}
-                                            </span>
-                                            <span className="text-sm font-medium text-green-600">
-                                                ${material.precio}/{material.unidad}
-                                            </span>
-                                        </div>
                                     </div>
                                     
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-gray-500">
-                                            Stock: {material.stock} {material.unidad}
+                                            Disponible para solicitar
                                         </span>
                                         <button
                                             onClick={() => agregarASolicitud(material)}
                                             className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
                                         >
-                                            + Agregar
+                                            + Solicitar
                                         </button>
                                     </div>
                                 </div>
@@ -418,15 +396,12 @@ const MaterialSelector = ({ user, currentWork, onMaterialRequest, workflowMode =
                                             {solicitud.obraNombre}
                                         </h4>
                                         <p className="text-sm text-gray-600">
-                                            {solicitud.fechaSolicitud?.toDate?.()?.toLocaleDateString()} - {solicitud.items?.length} items
+                                            {solicitud.fechaSolicitud?.toDate?.()?.toLocaleDateString()} - {solicitud.items?.length} materiales
                                         </p>
                                     </div>
                                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getEstadoColor(solicitud.estado)}`}>
                                         {solicitud.estado}
                                     </span>
-                                </div>
-                                <div className="text-sm text-gray-700">
-                                    Total: <span className="font-medium text-green-600">${solicitud.total?.toFixed(2)}</span>
                                 </div>
                             </div>
                         ))}
