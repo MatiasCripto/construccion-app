@@ -1,4 +1,4 @@
-// src/components/MobileInterface.js - VERSIÓN COMPLETA ACTUALIZADA
+// src/components/MobileInterface.js - VERSIÓN COMPLETA CON GPS TRACKING
 const { useState, useEffect, useRef } = React;
 
 const MobileInterface = ({ user, onLogout }) => {
@@ -149,9 +149,70 @@ const MobileInterface = ({ user, onLogout }) => {
           <MobileObrasList obras={obras} user={user} onUpdate={loadData} />
         )}
         
-        {/* *** NUEVA SECCIÓN DE REPORTES *** */}
+        {/* *** SECCIÓN DE REPORTES *** */}
         {activeTab === 'reportes' && (
           <MobileReportesView user={user} obras={obras} />
+        )}
+        
+        {/* *** NUEVA SECCIÓN GPS *** */}
+        {activeTab === 'gps' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold">📍 Mi Ubicación GPS</h2>
+              <div className="bg-green-100 px-3 py-1 rounded-full">
+                <span className="text-green-800 text-sm font-medium">
+                  {user.nombre}
+                </span>
+              </div>
+            </div>
+            
+            {/* Información importante */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-800 mb-2">🎯 Tracking GPS</h3>
+              <div className="text-sm text-blue-700 space-y-1">
+                <p>• Tu ubicación se comparte con el administrador</p>
+                <p>• Se actualiza automáticamente cada minuto</p>
+                <p>• Aparecerás en el mapa en tiempo real</p>
+                <p>• Optimizado para ahorrar batería</p>
+              </div>
+            </div>
+
+            {/* Componente de Geolocalización */}
+            <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+              <GeolocationComponent 
+                onLocationUpdate={(location) => {
+                  // La ubicación se guarda automáticamente en Firebase
+                  console.log('📍 Ubicación actualizada para admin:', location);
+                  setCurrentLocation(location);
+                }}
+                autoTrack={true}
+                highAccuracy={true}
+              />
+            </div>
+
+            {/* Estado del usuario en el sistema */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h3 className="font-semibold text-green-800 mb-2">👤 Tu Estado</h3>
+              <div className="text-sm text-green-700 space-y-1">
+                <p><strong>Usuario:</strong> {user.nombre} {user.apellido || ''}</p>
+                <p><strong>Rol:</strong> {getRoleLabel(user.rol)}</p>
+                <p><strong>Email:</strong> {user.email}</p>
+                {user.obra && <p><strong>Obra:</strong> {user.obra}</p>}
+                <p><strong>ID Sistema:</strong> {user.id}</p>
+              </div>
+            </div>
+
+            {/* Instrucciones */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h3 className="font-semibold text-yellow-800 mb-2">💡 Instrucciones</h3>
+              <div className="text-sm text-yellow-700 space-y-1">
+                <p>1. Presiona "▶️ Iniciar" en el componente de arriba</p>
+                <p>2. Acepta los permisos de ubicación cuando aparezcan</p>
+                <p>3. Tu ubicación aparecerá en el mapa del administrador</p>
+                <p>4. Puedes detener el tracking cuando quieras</p>
+              </div>
+            </div>
+          </div>
         )}
         
         {activeTab === 'camera' && (
@@ -469,7 +530,7 @@ const TabButton = ({ label, active, onClick }) => (
   </button>
 );
 
-// *** NUEVO COMPONENTE: Vista de Reportes Móvil ***
+// *** COMPONENTE: Vista de Reportes Móvil ***
 const MobileReportesView = ({ user, obras }) => {
   const [currentWork, setCurrentWork] = useState(null);
 
@@ -529,11 +590,12 @@ const MobileReportesView = ({ user, obras }) => {
   );
 };
 
-// Navigation inferior - *** ACTUALIZADA CON NUEVA PESTAÑA ***
+// Navigation inferior - *** ACTUALIZADA CON NUEVA PESTAÑA GPS ***
 const MobileBottomNav = ({ activeTab, onTabChange, userRole }) => {
   const tabs = [
     { id: 'obras', icon: '🏗️', label: 'Obras' },
-    { id: 'reportes', icon: '📋', label: 'Reportes' }, // *** NUEVA PESTAÑA ***
+    { id: 'reportes', icon: '📋', label: 'Reportes' },
+    { id: 'gps', icon: '📍', label: 'GPS' }, // *** NUEVA PESTAÑA GPS ***
     { id: 'camera', icon: '📷', label: 'Foto' },
     { id: 'chat', icon: '💬', label: 'Chat' },
     { id: 'profile', icon: '👤', label: 'Perfil' }

@@ -12,7 +12,7 @@ const GeolocationComponent = ({ onLocationUpdate, autoTrack = false, highAccurac
     if (autoTrack) {
       startTracking();
     }
-    
+
     return () => {
       stopTracking();
     };
@@ -56,7 +56,7 @@ const GeolocationComponent = ({ onLocationUpdate, autoTrack = false, highAccurac
     setTracking(false);
   };
 
-  const handleLocationSuccess = (position) => {
+  const handleLocationSuccess = async (position) => {
     const location = {
       lat: position.coords.latitude,
       lng: position.coords.longitude,
@@ -82,11 +82,21 @@ const GeolocationComponent = ({ onLocationUpdate, autoTrack = false, highAccurac
 
     // Guardar en almacenamiento local para uso offline
     localStorage.setItem('lastKnownLocation', JSON.stringify(location));
+
+    // *** NUEVO: Guardar también en Firebase para el admin ***
+    if (window.LocationTrackingService && window.user?.id) {
+      try {
+        await window.LocationTrackingService.saveEmployeeLocation(window.user.id, location);
+        console.log('📍 Ubicación guardada para admin');
+      } catch (error) {
+        console.error('Error guardando en Firebase:', error);
+      }
+    }
   };
 
   const handleLocationError = (error) => {
     let errorMessage = 'Error desconocido';
-    
+
     switch (error.code) {
       case error.PERMISSION_DENIED:
         errorMessage = 'Permisos de ubicación denegados';
@@ -101,7 +111,7 @@ const GeolocationComponent = ({ onLocationUpdate, autoTrack = false, highAccurac
 
     setError(errorMessage);
     setTracking(false);
-    
+
     // Intentar usar última ubicación conocida
     const lastLocation = localStorage.getItem('lastKnownLocation');
     if (lastLocation) {
@@ -128,29 +138,29 @@ const GeolocationComponent = ({ onLocationUpdate, autoTrack = false, highAccurac
 
   const calculateDistance = (lat1, lng1, lat2, lng2) => {
     const R = 6371e3; // Radio de la Tierra en metros
-    const φ1 = lat1 * Math.PI/180;
-    const φ2 = lat2 * Math.PI/180;
-    const Δφ = (lat2-lat1) * Math.PI/180;
-    const Δλ = (lng2-lng1) * Math.PI/180;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lng2 - lng1) * Math.PI / 180;
 
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
     return R * c; // Distancia en metros
   };
 
   const getTotalDistance = () => {
     if (locationHistory.length < 2) return 0;
-    
+
     let total = 0;
     for (let i = 1; i < locationHistory.length; i++) {
       const prev = locationHistory[i - 1];
       const curr = locationHistory[i];
       total += calculateDistance(prev.lat, prev.lng, curr.lat, curr.lng);
     }
-    
+
     return total;
   };
 
@@ -167,9 +177,9 @@ const GeolocationComponent = ({ onLocationUpdate, autoTrack = false, highAccurac
 
   const shareLocation = async () => {
     if (!currentLocation) return;
-    
+
     const locationText = `📍 Mi ubicación: ${formatCoordinates(currentLocation.lat, currentLocation.lng)}\n🗺️ Ver en Maps: https://maps.google.com/?q=${currentLocation.lat},${currentLocation.lng}`;
-    
+
     if (navigator.share) {
       try {
         await navigator.share({
@@ -192,11 +202,10 @@ const GeolocationComponent = ({ onLocationUpdate, autoTrack = false, highAccurac
         <h3 className="text-lg font-semibold">📍 Mi Ubicación</h3>
         <button
           onClick={tracking ? stopTracking : startTracking}
-          className={`px-3 py-1 rounded-lg text-sm font-medium ${
-            tracking 
-              ? 'bg-red-500 text-white' 
+          className={`px-3 py-1 rounded-lg text-sm font-medium ${tracking
+              ? 'bg-red-500 text-white'
               : 'bg-green-500 text-white'
-          }`}
+            }`}
         >
           {tracking ? '⏹️ Parar' : '▶️ Iniciar'}
         </button>
@@ -265,9 +274,9 @@ const GeolocationComponent = ({ onLocationUpdate, autoTrack = false, highAccurac
 
           {/* Mini mapa */}
           <div className="mt-4">
-            <MiniMap 
-              location={currentLocation} 
-              height="150px" 
+            <MiniMap
+              location={currentLocation}
+              height="150px"
               showUserLocation={true}
               locationHistory={locationHistory}
             />
@@ -391,15 +400,15 @@ const isLocationWithinRadius = (userLat, userLng, targetLat, targetLng, radiusIn
 
 const calculateDistance = (lat1, lng1, lat2, lng2) => {
   const R = 6371e3;
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lng2-lng1) * Math.PI/180;
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lng2 - lng1) * Math.PI / 180;
 
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return R * c;
 };
